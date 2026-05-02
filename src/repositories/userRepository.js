@@ -62,7 +62,7 @@ class UserRepository {
 
   // Find refresh token by token hash
   async findRefreshToken(tokenHash) {
-    return prisma.refreshToken.findUnique({
+    return prisma.refreshToken.findFirst({
       where: { tokenHash },
       include: {
         user: {
@@ -79,7 +79,7 @@ class UserRepository {
 
   // Revoke refresh token by token hash
   async revokeRefreshToken(tokenHash) {
-    return prisma.refreshToken.update({
+    return prisma.refreshToken.updateMany({
       where: { tokenHash },
       data: { revoked: true },
     });

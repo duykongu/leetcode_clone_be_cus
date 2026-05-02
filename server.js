@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const userRoutes = require('./src/routes/userRoutes');
+const problemsRoutes = require('./src/routes/problemsRoutes');
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api', userRoutes);
+app.use('/api/problems', problemsRoutes);
 
 // 404 Handler
 app.use((req, res) => {

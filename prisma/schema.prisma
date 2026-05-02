@@ -20,12 +20,6 @@ enum Role {
   admin
 }
 
-enum Difficulty {
-  easy
-  medium
-  hard
-}
-
 enum Language {
   cpp
   java
@@ -102,7 +96,7 @@ model Problem {
   title           String   @db.VarChar(255)
   slug            String   @unique @db.VarChar(255)
   description     String   @db.LongText
-  difficulty      Difficulty
+  difficulty      Int      @default(0) @map("difficulty")
   isActive        Boolean  @default(true) @map("is_active")
   acceptanceRate  Decimal  @default(0.00) @map("acceptance_rate") @db.Decimal(5,2)
   totalAccepted   Int      @default(0) @map("total_accepted")
