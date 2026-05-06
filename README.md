@@ -53,7 +53,7 @@ Sao chép file `.env.example` thành `.env` và cập nhật các biến:
 DATABASE_URL="mysql://username:password@localhost:3306/leetcode_db"  // Đổi thành url local của mình
 
 # Server
-PORT=3000
+PORT=5000
 HOST=localhost
 
 # JWT (optional - khi triển khai auth)
