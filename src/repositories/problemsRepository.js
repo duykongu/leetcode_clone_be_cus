@@ -27,6 +27,15 @@ class problemsRepository {
       },
     };
   }
+
+  async getProblemDetail(params = {}) {
+    const { where, select, include } = params;
+    return await prisma.problem.findUnique({
+      where,
+      select,
+      include,
+    });
+  }
 }
 
 module.exports = new problemsRepository();
