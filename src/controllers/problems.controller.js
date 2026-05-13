@@ -1,4 +1,4 @@
-const problemService = require('../services/problemService');
+const problemService = require('../services/problem.service');
 
 class ProblemsController {
   async getProblems(req, res) {
@@ -6,7 +6,6 @@ class ProblemsController {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 50;
       const userId = req.user?.id;
-      
       const filters = {
         search: req.query.search,
         category: req.query.category,
@@ -38,6 +37,20 @@ class ProblemsController {
       });
     }
   }
+
+  async importProblem(req, res) {
+    try {
+      const problemData = req.body;
+      const result = await problemService.importProblem(problemData);
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || 'Error',
+      });
+    }
+  }
 }
+
 
 module.exports = new ProblemsController();

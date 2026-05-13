@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
-const userRepo = require('../repositories/userRepository');
+const { userRepository: userRepo } = require('../repositories');
+const { HTTP_STATUS } = require('../constants');
 
 class AuthMiddleware {
   async authenticate(req, res, next) {
@@ -7,7 +8,7 @@ class AuthMiddleware {
       const authHeader = req.headers.authorization;
 
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
           message: 'No token provided',
           code: 'MISSING_TOKEN',
@@ -17,7 +18,7 @@ class AuthMiddleware {
       const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
       if (!token) {
-        return res.status(401).json({
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
           message: 'Invalid token format',
           code: 'INVALID_TOKEN_FORMAT',
@@ -38,7 +39,7 @@ class AuthMiddleware {
       });
 
       if (!user) {
-        return res.status(401).json({
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
           message: 'User not found',
           code: 'USER_NOT_FOUND',
@@ -49,14 +50,14 @@ class AuthMiddleware {
       next();
     } catch (err) {
       if (err.name === 'JsonWebTokenError') {
-        return res.status(401).json({
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
           message: 'Invalid token',
           code: 'INVALID_TOKEN',
         });
       }
       if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({
+        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
           success: false,
           message: 'Token expired',
           code: 'TOKEN_EXPIRED',
@@ -64,7 +65,7 @@ class AuthMiddleware {
       }
 
       console.error('Auth middleware error:', err);
-      return res.status(500).json({
+      return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: 'Internal server error',
         code: 'INTERNAL_SERVER_ERROR',
