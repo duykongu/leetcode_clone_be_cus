@@ -1,39 +1,20 @@
 const BaseRepository = require("./base.repository");
 
 class problemsRepository extends BaseRepository {
+  constructor() {
+    super("problem");
+  }
+
   async getProblems(params = {}) {
-    const { select, where, orderBy, page = 1, limit = 10 } = params;
-    const skip = (page - 1) * limit;
-
-    // Get paginated data
-    const data = await this.prisma.problem.findMany({
-      where: where,
-      select: select,
-      orderBy: orderBy || { createdAt: "desc" },
-      skip,
-      take: limit,
-    });
-
-    // Get total count for pagination info
-    const total = await this.prisma.problem.count({ where });
-
-    return {
-      data,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return this.findPaginated(params);
   }
 
   async getProblemDetail(params = {}) {
     const { where, select, include } = params;
     return await this.prisma.problem.findUnique({
       where,
-      select,
-      include,
+      ...(select && { select }),
+      ...(include && { include }),
     });
   }
 
@@ -43,12 +24,10 @@ class problemsRepository extends BaseRepository {
       where,
       update,
       create,
-      select,
-      include,
+      ...(select && { select }),
+      ...(include && { include }),
     });
   }
 }
-
-
 
 module.exports = new problemsRepository();

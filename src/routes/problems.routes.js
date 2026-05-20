@@ -2,15 +2,14 @@ const express = require('express');
 const router = express.Router();
 const problemsController = require('../controllers/problems.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const { PERMISSIONS } = require('../constants/permissions');
 
-// Get all problems
+// Public routes
 router.get('/', authMiddleware.optionalAuth, problemsController.getProblems);
-
-// Get problem detail
 router.get('/:id', authMiddleware.optionalAuth, problemsController.getProblemDetail);
 
-// Import problem (Should be admin-only in production)
-router.post('/import', problemsController.importProblem);
-
+// Admin only routes
+router.get('/admin/stats', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.VIEW_ADMIN_STATS), problemsController.getStats);
+router.post('/import', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.MANAGE_PROBLEMS), problemsController.importProblem);
 
 module.exports = router;

@@ -1,18 +1,36 @@
 const { problemsRepository, userRepository } = require("../repositories");
 const { HTTP_STATUS, PROBLEM_DIFFICULTY } = require("../constants");
-const { cleanDescriptionHtml, structureDescription } = require("../utils/html-cleaner");
+const { structureDescription } = require("../utils/html-cleaner");
+const { can } = require("../utils/access-control");
+const { PERMISSIONS } = require("../constants/permissions");
 
 class problemsService {
-  async getProblems(page = 1, limit = 50, userId = null, filters = {}) {
+  async getStats() {
+    const [userCount, problemCount] = await Promise.all([
+      userRepository.count(),
+      problemsRepository.count(),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        totalUsers: userCount,
+        totalProblems: problemCount,
+        totalSubmissions: 0,
+      },
+    };
+  }
+
+  async getProblems(page = 1, limit = 50, user = null, filters = {}) {
     const { search, category, difficulty } = filters;
+    const canViewHidden = can(user, PERMISSIONS.VIEW_HIDDEN_PROBLEMS);
+    const userId = user?.id;
 
     const where = {
-      isActive: true,
+      // If cannot view hidden, only show active problems
+      ...(!canViewHidden && { isActive: true }),
       ...(search && {
-        OR: [
-          { title: { contains: search } },
-          { slug: { contains: search } },
-        ],
+        OR: [{ title: { contains: search } }, { slug: { contains: search } }],
       }),
     };
 
@@ -34,6 +52,8 @@ class problemsService {
         acceptanceRate: true,
         difficulty: true,
         createdAt: true,
+        // Include admin fields if has permission
+        ...(canViewHidden && { isActive: true, slug: true }),
         ...(userId && {
           userProblems: {
             where: { userId },
@@ -64,6 +84,7 @@ class problemsService {
     }
 
     return {
+      success: true,
       message: "Problems retrieved successfully",
       data,
       pagination: result.pagination,

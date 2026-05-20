@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { userRepository: userRepo } = require('../repositories');
 const { HTTP_STATUS } = require('../constants');
+const { can } = require("../utils/access-control");
+const { PERMISSIONS } = require("../constants/permissions");
 
 class AuthMiddleware {
   async authenticate(req, res, next) {
@@ -102,6 +104,19 @@ class AuthMiddleware {
       // For optional auth, just continue even if token is invalid
       next();
     }
+  }
+
+  requirePermission(permission) {
+    return (req, res, next) => {
+      if (!can(req.user, permission)) {
+        return res.status(HTTP_STATUS.FORBIDDEN).json({
+          success: false,
+          message: `Forbidden: You do not have the required permission (${permission})`,
+          code: "FORBIDDEN_PERMISSION_REQUIRED",
+        });
+      }
+      next();
+    };
   }
 }
 

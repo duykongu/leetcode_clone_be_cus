@@ -1,6 +1,10 @@
 const BaseRepository = require("./base.repository");
 
 class UserRepository extends BaseRepository {
+  constructor() {
+    super("user");
+  }
+
   // Create a new user account
   async createAccount(data, options = {}) {
     const { select, ...otherOptions } = options;
@@ -53,6 +57,11 @@ class UserRepository extends BaseRepository {
       where: { id: userId },
       data: { lastActive: new Date() },
     });
+  }
+
+  // Find all users (for admin)
+  async findAll(options = {}) {
+    return this.findPaginated(options);
   }
 }
 
