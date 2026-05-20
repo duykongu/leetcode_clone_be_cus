@@ -246,4 +246,4 @@ class problemsService {
 
 
 
-module.exports = new problemsService();
+module.exports = problemsService;

@@ -1,10 +1,13 @@
 const { userRepository: userRepo, tokenRepository: tokenRepo } = require("../repositories");
 const bcrypt = require("bcryptjs");
 const validator = require("../utils/validator");
-const tokenService = require("./token.service");
 const { HTTP_STATUS } = require("../constants");
 
 class AuthService {
+  constructor({ tokenService }) {
+    this.tokenService = tokenService;
+  }
+
   async register(data) {
     validator.validateRegister(data);
     const { username, email, password } = data;
@@ -38,7 +41,7 @@ class AuthService {
       },
     );
 
-    const token = tokenService.generateToken(user);
+    const token = this.tokenService.generateToken(user);
 
     return { message: "User created successfully", data: { user, token } };
   }
@@ -66,7 +69,7 @@ class AuthService {
       throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: "Email hoặc password không đúng" };
     }
 
-    const token = tokenService.generateToken(user);
+    const token = this.tokenService.generateToken(user);
     await userRepo.updateLastActive(user.id);
 
     return { message: "Login successful", data: { user, token } };
@@ -103,4 +106,4 @@ class AuthService {
   }
 }
 
-module.exports = new AuthService();
+module.exports = AuthService;

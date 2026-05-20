@@ -1,9 +1,13 @@
-const problemService = require('../services/problem.service');
+const { getPagination } = require('../utils/pagination');
 
 class ProblemsController {
-  async getStats(req, res) {
+  constructor({ problemService }) {
+    this.problemService = problemService;
+  }
+
+  getStats = async (req, res) => {
     try {
-      const stats = await problemService.getStats();
+      const stats = await this.problemService.getStats();
       res.json(stats);
     } catch (err) {
       res.status(err.statusCode || 500).json({
@@ -13,10 +17,9 @@ class ProblemsController {
     }
   }
 
-  async getProblems(req, res) {
+  getProblems = async (req, res) => {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 50;
+      const { page, limit } = getPagination(req.query, 50);
       const user = req.user;
       const filters = {
         search: req.query.search,
@@ -24,7 +27,7 @@ class ProblemsController {
         difficulty: req.query.difficulty,
       };
 
-      const result = await problemService.getProblems(page, limit, user, filters);
+      const result = await this.problemService.getProblems(page, limit, user, filters);
       res.json(result);
     } catch (err) {
       res.status(err.statusCode || 500).json({
@@ -35,11 +38,11 @@ class ProblemsController {
     }
   }
 
-  async getProblemDetail(req, res) {
+  getProblemDetail = async (req, res) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id; // Get userId if authenticated
-      const result = await problemService.getProblemDetail(id, userId);
+      const result = await this.problemService.getProblemDetail(id, userId);
       res.json(result);
     } catch (err) {
       res.status(err.statusCode || 500).json({
@@ -50,10 +53,10 @@ class ProblemsController {
     }
   }
 
-  async importProblem(req, res) {
+  importProblem = async (req, res) => {
     try {
       const problemData = req.body;
-      const result = await problemService.importProblem(problemData);
+      const result = await this.problemService.importProblem(problemData);
       res.json(result);
     } catch (err) {
       res.status(err.statusCode || 500).json({
@@ -64,5 +67,4 @@ class ProblemsController {
   }
 }
 
-
-module.exports = new ProblemsController();
+module.exports = ProblemsController;

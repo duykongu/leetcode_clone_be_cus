@@ -1,11 +1,14 @@
-const authService = require('../services/auth.service');
-const tokenService = require('../services/token.service');
 const { HTTP_STATUS } = require('../constants');
 
 class AuthController {
-  async register(req, res) {
+  constructor({ authService, tokenService }) {
+    this.authService = authService;
+    this.tokenService = tokenService;
+  }
+
+  register = async (req, res) => {
     try {
-      const data = await authService.register(req.body);
+      const data = await this.authService.register(req.body);
       res.status(HTTP_STATUS.CREATED).json(data);
     } catch (err) {
       res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
@@ -16,12 +19,12 @@ class AuthController {
     }
   }
 
-  async login(req, res) {
+  login = async (req, res) => {
     try {
       const { email, password } = req.body;
-      const loginResult = await authService.login({ email, password });
+      const loginResult = await this.authService.login({ email, password });
       const user = loginResult.data.user;
-      const refreshToken = await tokenService.storeRefreshToken(user.id, tokenService.generateRefreshToken(user));
+      const refreshToken = await this.tokenService.storeRefreshToken(user.id, this.tokenService.generateRefreshToken(user));
 
       res.json({
         ...loginResult,
@@ -39,10 +42,10 @@ class AuthController {
     }
   }
 
-  async refreshToken(req, res) {
+  refreshToken = async (req, res) => {
     try {
       const { refreshToken } = req.body;
-      const tokenData = await tokenService.refreshToken(refreshToken);
+      const tokenData = await this.tokenService.refreshToken(refreshToken);
       res.json({
         success: true,
         message: 'Token refreshed successfully',
@@ -57,10 +60,10 @@ class AuthController {
     }
   }
 
-  async logout(req, res) {
+  logout = async (req, res) => {
     try {
       const userId = req.user.id;
-      await authService.logout(userId);
+      await this.authService.logout(userId);
 
       res.json({
         success: true,
@@ -77,4 +80,4 @@ class AuthController {
   }
 }
 
-module.exports = new AuthController();
+module.exports = AuthController;

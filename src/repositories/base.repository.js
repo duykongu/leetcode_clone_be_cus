@@ -1,4 +1,5 @@
 const prisma = require("../config/database");
+const { buildPaginatedResponse } = require("../utils/pagination");
 
 class BaseRepository {
   constructor(modelName) {
@@ -31,15 +32,7 @@ class BaseRepository {
       this.model.count({ where }),
     ]);
 
-    return {
-      data,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return buildPaginatedResponse(data, page, limit, total);
   }
 
   async count(where = {}) {

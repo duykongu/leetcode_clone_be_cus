@@ -1,11 +1,15 @@
-const authService = require('../services/auth.service');
-const profileService = require('../services/profile.service');
 const { HTTP_STATUS } = require('../constants');
+const { getPagination } = require('../utils/pagination');
 
 class UserController {
-  async me(req, res) {
+  constructor({ authService, profileService }) {
+    this.authService = authService;
+    this.profileService = profileService;
+  }
+
+  me = async (req, res) => {
     try {
-      const user = await profileService.getProfile(req.user.id);
+      const user = await this.profileService.getProfile(req.user.id);
       res.json({
         success: true,
         data: { user },
@@ -19,11 +23,10 @@ class UserController {
     }
   }
 
-  async getUsers(req, res) {
+  getUsers = async (req, res) => {
     try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
-      const result = await authService.getUsers(page, limit);
+      const { page, limit } = getPagination(req.query, 10);
+      const result = await this.authService.getUsers(page, limit);
       res.json(result);
     } catch (err) {
       res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
@@ -34,4 +37,4 @@ class UserController {
   }
 }
 
-module.exports = new UserController();
+module.exports = UserController;
