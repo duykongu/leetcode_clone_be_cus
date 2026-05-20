@@ -1,18 +1,30 @@
 const problemService = require('../services/problem.service');
 
 class ProblemsController {
+  async getStats(req, res) {
+    try {
+      const stats = await problemService.getStats();
+      res.json(stats);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || "Error",
+      });
+    }
+  }
+
   async getProblems(req, res) {
     try {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 50;
-      const userId = req.user?.id;
+      const user = req.user;
       const filters = {
         search: req.query.search,
         category: req.query.category,
         difficulty: req.query.difficulty,
       };
 
-      const result = await problemService.getProblems(page, limit, userId, filters);
+      const result = await problemService.getProblems(page, limit, user, filters);
       res.json(result);
     } catch (err) {
       res.status(err.statusCode || 500).json({

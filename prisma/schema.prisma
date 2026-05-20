@@ -105,12 +105,14 @@ model Problem {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  creator        User? @relation("ProblemCreator", fields: [createdBy], references: [id], onDelete: SetNull)
-  testCases      TestCase[]
-  codeTemplates  CodeTemplate[]
-  submissions    Submission[]
-  problemTags    ProblemTag[]
-  userProblems   UserProblemStatus[]
+  creator       User?               @relation("ProblemCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  testCases     TestCase[]
+  codeTemplates CodeTemplate[]
+  submissions   Submission[]
+  problemTags   ProblemTag[]
+  userProblems  UserProblemStatus[]
+  examples      ProblemExample[]
+  constraints   ProblemConstraint[]
 
   @@map("problems")
 }
@@ -209,4 +211,29 @@ model UserProblemStatus {
   @@id([userId, problemId])
   @@map("user_problem_status")
 }
- 
+
+/// ================= PROBLEM_EXAMPLES =================
+model ProblemExample {
+  id          String  @id @default(uuid()) @db.Char(36)
+  problemId   String  @map("problem_id") @db.Char(36)
+  input       String  @db.Text
+  output      String  @db.Text
+  explanation String? @db.Text
+  orderIndex  Int     @default(0) @map("order_index")
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("problem_examples")
+}
+
+/// ================= PROBLEM_CONSTRAINTS =================
+model ProblemConstraint {
+  id         String @id @default(uuid()) @db.Char(36)
+  problemId  String @map("problem_id") @db.Char(36)
+  content    String @db.Text
+  orderIndex Int    @default(0) @map("order_index")
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("problem_constraints")
+}

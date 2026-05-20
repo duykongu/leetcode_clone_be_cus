@@ -1,4 +1,4 @@
-const { userRepository: userRepo } = require("../repositories");
+const { userRepository: userRepo, tokenRepository: tokenRepo } = require("../repositories");
 const bcrypt = require("bcryptjs");
 const validator = require("../utils/validator");
 const tokenService = require("./token.service");
@@ -77,8 +77,29 @@ class AuthService {
       throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: 'User ID is required' };
     }
 
-    await userRepo.revokeAllRefreshTokens(userId);
+    await tokenRepo.revokeAllRefreshTokens(userId);
     return { message: 'Logged out successfully' };
+  }
+
+  async getUsers(page = 1, limit = 10) {
+    const result = await userRepo.findAll({
+      page,
+      limit,
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        createdAt: true,
+        lastActive: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return {
+      success: true,
+      ...result,
+    };
   }
 }
 

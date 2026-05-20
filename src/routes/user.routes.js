@@ -1,21 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const authController = require('../controllers/auth.controller');
+const userController = require('../controllers/user.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const { PERMISSIONS } = require('../constants/permissions');
 
-// Register new user (public)
-router.post('/register', authController.register);
+// Protected routes (User + Admin)
+router.get('/me', authMiddleware.authenticate, userController.me);
 
-// Login user (public)
-router.post('/login', authController.login);
-
-// Refresh access token (public - requires refresh token in body)
-router.post('/refresh-token', authController.refreshToken);
-
-// Get current user profile (requires auth)
-router.get('/me', authMiddleware.authenticate, authController.me);
-
-// Logout (requires auth)
-router.post('/logout', authMiddleware.authenticate, authController.logout);
+// Admin only routes
+router.get('/admin/users', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.VIEW_USERS), userController.getUsers);
 
 module.exports = router;

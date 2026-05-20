@@ -1,18 +1,36 @@
 const { problemsRepository, userRepository } = require("../repositories");
 const { HTTP_STATUS, PROBLEM_DIFFICULTY } = require("../constants");
-const { cleanDescriptionHtml, structureDescription } = require("../utils/html-cleaner");
+const { structureDescription } = require("../utils/html-cleaner");
+const { can } = require("../utils/access-control");
+const { PERMISSIONS } = require("../constants/permissions");
 
 class problemsService {
-  async getProblems(page = 1, limit = 50, userId = null, filters = {}) {
+  async getStats() {
+    const [userCount, problemCount] = await Promise.all([
+      userRepository.count(),
+      problemsRepository.count(),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        totalUsers: userCount,
+        totalProblems: problemCount,
+        totalSubmissions: 0,
+      },
+    };
+  }
+
+  async getProblems(page = 1, limit = 50, user = null, filters = {}) {
     const { search, category, difficulty } = filters;
+    const canViewHidden = can(user, PERMISSIONS.VIEW_HIDDEN_PROBLEMS);
+    const userId = user?.id;
 
     const where = {
-      isActive: true,
+      // If cannot view hidden, only show active problems
+      ...(!canViewHidden && { isActive: true }),
       ...(search && {
-        OR: [
-          { title: { contains: search } },
-          { slug: { contains: search } },
-        ],
+        OR: [{ title: { contains: search } }, { slug: { contains: search } }],
       }),
     };
 
@@ -34,6 +52,8 @@ class problemsService {
         acceptanceRate: true,
         difficulty: true,
         createdAt: true,
+        // Include admin fields if has permission
+        ...(canViewHidden && { isActive: true, slug: true }),
         ...(userId && {
           userProblems: {
             where: { userId },
@@ -64,6 +84,7 @@ class problemsService {
     }
 
     return {
+      success: true,
       message: "Problems retrieved successfully",
       data,
       pagination: result.pagination,
@@ -74,16 +95,48 @@ class problemsService {
   async getProblemDetail(id, userId = null) {
     const problem = await problemsRepository.getProblemDetail({
       where: { id },
-      include: {
-        codeTemplates: true,
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        difficulty: true,
+        codeTemplates: {
+          select: {
+            language: true,
+            starterCode: true,
+          }
+        },
         testCases: {
           where: { isHidden: false },
           orderBy: { orderIndex: "asc" },
+          select: {
+            input: true,
+            expectedOutput: true,
+          }
         },
         problemTags: {
-          include: {
-            tag: true,
-          },
+          select: {
+            tag: {
+              select: {
+                name: true,
+                slug: true,
+              }
+            }
+          }
+        },
+        examples: {
+          orderBy: { orderIndex: "asc" },
+          select: {
+            input: true,
+            output: true,
+            explanation: true,
+          }
+        },
+        constraints: {
+          orderBy: { orderIndex: "asc" },
+          select: {
+            content: true,
+          }
         },
         // Only fetch submissions if user is authenticated
         ...(userId && {
@@ -91,6 +144,15 @@ class problemsService {
             where: { userId },
             orderBy: { submittedAt: "desc" },
             take: 20,
+            select: {
+              id: true,
+              language: true,
+              code: true,
+              status: true,
+              runtimeMs: true,
+              memoryKb: true,
+              submittedAt: true,
+            }
           },
         }),
       },
@@ -121,7 +183,19 @@ class problemsService {
 
     // 1. Làm sạch và cấu trúc lại mô tả thành JSON {des, example, condition}
     const structuredData = structureDescription(description);
-    const finalDescription = JSON.stringify(structuredData);
+    const finalDescription = structuredData.des;
+
+    const examplesLogic = structuredData.example.map((ex, i) => ({
+      input: ex.input,
+      output: ex.output,
+      explanation: ex.explanation || null,
+      orderIndex: i,
+    }));
+
+    const constraintsLogic = structuredData.condition.map((cond, i) => ({
+      content: cond,
+      orderIndex: i,
+    }));
 
     const baseData = {
       title,
@@ -129,9 +203,6 @@ class problemsService {
       difficulty,
       isActive: true,
     };
-
-
-
 
     const problemTagsLogic = problemTags.map((pt) => ({
       tag: {
@@ -149,6 +220,8 @@ class problemsService {
         testCases: { deleteMany: {}, create: testCases },
         codeTemplates: { deleteMany: {}, create: codeTemplates },
         problemTags: { deleteMany: {}, create: problemTagsLogic },
+        examples: { deleteMany: {}, create: examplesLogic },
+        constraints: { deleteMany: {}, create: constraintsLogic },
       },
       create: {
         ...baseData,
@@ -156,6 +229,8 @@ class problemsService {
         testCases: { create: testCases },
         codeTemplates: { create: codeTemplates },
         problemTags: { create: problemTagsLogic },
+        examples: { create: examplesLogic },
+        constraints: { create: constraintsLogic },
       },
       select: { id: true },
     });
