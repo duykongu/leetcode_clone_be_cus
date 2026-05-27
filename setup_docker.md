@@ -1,19 +1,21 @@
-cài docker
-mở cmd -> cài môi trường cho docker
+# Hướng dẫn Setup Môi trường Docker bằng 1 lệnh duy nhất
 
-# 1. Môi trường C++ 
-docker pull gcc:latest
+## 1. Tải tất cả các Docker Images
 
-# 2. Môi trường Java
-docker pull eclipse-temurin:17-jdk-alpine
+Chạy lệnh gộp dưới đây tùy thuộc vào Shell bạn đang mở:
 
-# 3. Môi trường Python 
-docker pull python:3.9-slim
+### Cho PowerShell:
+```powershell
+docker pull gcc:latest; docker pull eclipse-temurin:17-jdk-alpine; docker pull python:3.9-slim; docker pull node:18-alpine
+```
 
-# 4. Môi trường JavaScript & TypeScript 
-docker pull node:18-alpine
+### Cho CMD (Command Prompt):
+```cmd
+docker pull gcc:latest && docker pull eclipse-temurin:17-jdk-alpine && docker pull python:3.9-slim && docker pull node:18-alpine
+```
 
-
-o phan frontend
-cai them
+## 2. Cài đặt thêm thư viện ở Frontend
+Di chuyển vào thư mục `leetcode_fe` và chạy:
+```bash
 npm install axios
+```
