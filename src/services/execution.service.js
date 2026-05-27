@@ -87,7 +87,16 @@ async runCode(data) {
 
       for (let i = 0; i < testCases.length; i++) {
         const tc = testCases[i];
-        const runResult = await this.executeSingleTestCase(config.runArgs(runDir), tc.input);
+        
+        // Làm sạch input trước khi truyền vào stdin
+        let cleanInput = tc.input;
+        if (/^input:\s*/i.test(cleanInput)) {
+          cleanInput = cleanInput.replace(/^input:\s*/i, '').trim();
+        }
+        // Loại bỏ tên biến gán (ví dụ: nums = [2,7,11,15], target = 9 -> [2,7,11,15], 9)
+        cleanInput = cleanInput.replace(/[a-zA-Z_]+\s*=\s*/g, '').trim();
+
+        const runResult = await this.executeSingleTestCase(config.runArgs(runDir), cleanInput);
 
         if (runResult.status === SUBMISSION_STATUS.TIME_LIMIT_EXCEEDED || runResult.status === SUBMISSION_STATUS.RUNTIME_ERROR) {
           finalStatus = runResult.status;
