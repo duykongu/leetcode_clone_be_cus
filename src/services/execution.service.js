@@ -5,6 +5,25 @@ const { exec, spawn } = require('child_process');
 const prisma = require('../config/database'); 
 const { SUBMISSION_STATUS } = require('../constants'); 
 
+const cleanTestCaseData = (rawData) => {
+  if (!rawData) return "";
+  
+  // Biểu thức Regex bao trọn 3 trường hợp của bạn:
+  // 1. \[[^\]]*\] : Bắt mọi thứ từ [ đến ] (Ví dụ: [2,7,11,15])
+  // 2. "[^"]*"    : Bắt mọi thứ từ " đến " (Ví dụ: "abcabcbb")
+  // 3. -?\d+(?:\.\d+)? : Bắt các chữ số (Ví dụ: 9, 6, -1, 2.5)
+  const regex = /(\[[^\]]*\]|"[^"]*"|-?\d+(?:\.\d+)?)/g;
+  
+  // Quét chuỗi và lấy ra mảng các giá trị hợp lệ
+  const matches = rawData.match(regex);
+  
+  if (matches) {
+    // Nối các giá trị lại bằng dấu xuống dòng (\n) để bơm vào Docker
+    return matches.join('\n');
+  }
+  
+  return rawData; // Nếu không có gì để lọc thì trả về nguyên gốc
+};
 // ==========================================
 // BẢN ĐỒ CẤU HÌNH NGÔN NGỮ (LANGUAGE CONFIG)
 // ==========================================
@@ -44,7 +63,7 @@ async runCode(data) {
       return { success: false, message: `Hệ thống chưa hỗ trợ ngôn ngữ: ${language}` };
     }
 
-    const testCases = await prisma.testCase.findMany({
+    let testCases = await prisma.testCase.findMany({
       where: { problemId: problemId },
       orderBy: { orderIndex: 'asc' } 
     });
@@ -52,7 +71,12 @@ async runCode(data) {
     if (!testCases || testCases.length === 0) {
       return { success: false, message: "Bài toán này chưa có testcase nào trong hệ thống!" };
     }
-
+    testCases = testCases.map(tc => ({
+      ...tc,
+      input: cleanTestCaseData(tc.input), 
+      expectedOutput: cleanTestCaseData(tc.expectedOutput) 
+    }));
+    // ==
     // TẠO THƯ MỤC TẠM  -> vùng đệm chứa file code, cổng thông hành giữa host với docker
     const tempDir = path.resolve(__dirname, '../../temp');
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
@@ -60,7 +84,7 @@ async runCode(data) {
     const runId = Date.now().toString();
     const runDir = path.join(tempDir, runId);
     fs.mkdirSync(runDir);
-
+   
     // BẮT ĐẦU KHỐI BẢO HIỂM
     try {
       const filePath = path.join(runDir, config.fileName);
