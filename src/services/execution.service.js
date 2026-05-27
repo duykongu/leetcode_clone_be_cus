@@ -8,21 +8,23 @@ const { SUBMISSION_STATUS } = require('../constants');
 const cleanTestCaseData = (rawData) => {
   if (!rawData) return "";
   
-  // Biểu thức Regex bao trọn 3 trường hợp của bạn:
-  // 1. \[[^\]]*\] : Bắt mọi thứ từ [ đến ] (Ví dụ: [2,7,11,15])
-  // 2. "[^"]*"    : Bắt mọi thứ từ " đến " (Ví dụ: "abcabcbb")
-  // 3. -?\d+(?:\.\d+)? : Bắt các chữ số (Ví dụ: 9, 6, -1, 2.5)
+  // 1. Dọn dẹp sơ bộ: Biến các ký tự \n (nếu gõ nhầm trong DB) thành khoảng trắng để tránh lỗi dính chữ
+  let text = rawData.replace(/\\n/g, ' ');
+
+  // 2. Gom các cụm theo đúng logic của bạn: 
+  // - \[[^\]]*\] : Từ [ đến ]
+  // - "[^"]*"    : Từ " đến "
+  // - -?\d+(?:\.\d+)? : Các con số đứng lẻ
   const regex = /(\[[^\]]*\]|"[^"]*"|-?\d+(?:\.\d+)?)/g;
   
-  // Quét chuỗi và lấy ra mảng các giá trị hợp lệ
-  const matches = rawData.match(regex);
+  const matches = text.match(regex);
   
   if (matches) {
-    // Nối các giá trị lại bằng dấu xuống dòng (\n) để bơm vào Docker
+    // 3. Cứ gom xong 1 cục thì tự động nối bằng 1 dấu Enter (xuống dòng chuẩn của HĐH)
     return matches.join('\n');
   }
   
-  return rawData; // Nếu không có gì để lọc thì trả về nguyên gốc
+  return text; 
 };
 // ==========================================
 // BẢN ĐỒ CẤU HÌNH NGÔN NGỮ (LANGUAGE CONFIG)
@@ -160,7 +162,7 @@ async runCode(data) {
       const timeoutId = setTimeout(() => {
         isTimeout = true;
         runProcess.kill(); 
-      }, 2000);
+      }, 10000);
 
       runProcess.stdout.on('data', (data) => output += data.toString());
       runProcess.stderr.on('data', (data) => error += data.toString());
