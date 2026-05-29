@@ -10,7 +10,6 @@ class problemsService {
       userRepository.count(),
       problemsRepository.count(),
     ]);
-
     return {
       success: true,
       data: {
@@ -27,7 +26,6 @@ class problemsService {
     const userId = user?.id;
 
     const where = {
-      // If cannot view hidden, only show active problems
       ...(!canViewHidden && { isActive: true }),
       ...(search && {
         OR: [{ title: { contains: search } }, { slug: { contains: search } }],
@@ -49,11 +47,11 @@ class problemsService {
       select: {
         id: true,
         title: true,
+        slug: true, //ĐƯA SLUG RA NGOÀI ĐỂ FIX LỖI 500 FRONTEND
         acceptanceRate: true,
         difficulty: true,
         createdAt: true,
-        // Include admin fields if has permission
-        ...(canViewHidden && { isActive: true, slug: true }),
+        ...(canViewHidden && { isActive: true }),
         ...(userId && {
           userProblems: {
             where: { userId },
@@ -74,7 +72,6 @@ class problemsService {
       return { ...problemData, isSolved };
     });
 
-    // Get user stats if authenticated
     let userStats = { solvedCount: 0, streakDays: 0 };
     if (userId) {
       const user = await userRepository.findById(userId, {
@@ -138,7 +135,6 @@ class problemsService {
             content: true,
           }
         },
-        // Only fetch submissions if user is authenticated
         ...(userId && {
           submissions: {
             where: { userId },
@@ -152,6 +148,9 @@ class problemsService {
               runtimeMs: true,
               memoryKb: true,
               submittedAt: true,
+              passedCases: true, 
+              totalCases: true, 
+              errorMessage: true 
             }
           },
         }),
@@ -181,7 +180,6 @@ class problemsService {
       codeTemplates,
     } = problemData;
 
-    // 1. Làm sạch và cấu trúc lại mô tả thành JSON {des, example, condition}
     const structuredData = structureDescription(description);
     const finalDescription = structuredData.des;
 
@@ -213,12 +211,22 @@ class problemsService {
       },
     }));
 
+  
+
+    // Áp dụng quét vào mảng Templates
+    const codeTemplatesLogic = codeTemplates.map(ct => ({
+        language: ct.language,
+        starterCode: ct.starterCode,
+        solutionCode: ct.solutionCode,
+    }));
+
     await problemsRepository.upsertProblem({
       where: { slug },
       update: {
         ...baseData,
+        metadata: problemData.metadata,
         testCases: { deleteMany: {}, create: testCases },
-        codeTemplates: { deleteMany: {}, create: codeTemplates },
+        codeTemplates: { deleteMany: {}, create: codeTemplatesLogic }, // Đã map logic mới
         problemTags: { deleteMany: {}, create: problemTagsLogic },
         examples: { deleteMany: {}, create: examplesLogic },
         constraints: { deleteMany: {}, create: constraintsLogic },
@@ -226,8 +234,9 @@ class problemsService {
       create: {
         ...baseData,
         slug,
+        metadata: problemData.metadata,
         testCases: { create: testCases },
-        codeTemplates: { create: codeTemplates },
+        codeTemplates: { create: codeTemplatesLogic }, // Đã map logic mới
         problemTags: { create: problemTagsLogic },
         examples: { create: examplesLogic },
         constraints: { create: constraintsLogic },
@@ -240,10 +249,6 @@ class problemsService {
       message: "Problem imported/updated successfully",
     };
   }
-
 }
-
-
-
 
 module.exports = problemsService;

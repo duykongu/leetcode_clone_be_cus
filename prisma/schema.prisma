@@ -102,6 +102,7 @@ model Problem {
   totalAccepted   Int      @default(0) @map("total_accepted")
   totalSubmitted  Int      @default(0) @map("total_submitted")
   createdBy       String?  @map("created_by") @db.Char(36)
+  metadata        Json?
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -151,6 +152,7 @@ model CodeTemplate {
   language     Language
   starterCode  String   @map("starter_code") @db.LongText
   solutionCode String?  @map("solution_code") @db.LongText
+  
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
