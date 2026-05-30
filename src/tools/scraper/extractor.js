@@ -5,45 +5,43 @@ const path = require('path');
 const LEETCODE_GRAPHQL_URL = 'https://leetcode.com/graphql';
 const COMMON_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 };
 
 const tempDir = path.resolve(__dirname, '../../temp/scraper_data');
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-// TÍNH NĂNG MỚI: Lấy danh sách N bài tập miễn phí theo danh mục
-async function getFreeProblemList(limit = 50, skip = 0, category = "algorithms") {
-    const categoryMap = {
-        "algorithms": ""
-    };
+// Hàm tiện ích để gọi GraphQL rút gọn code lặp lại
+async function fetchLeetCode(query, variables) {
+    const { data } = await axios.post(LEETCODE_GRAPHQL_URL, { query, variables }, { headers: COMMON_HEADERS });
+    if (data.errors) throw new Error(data.errors[0].message);
+    return data.data;
+}
 
+/**
+ * Lấy danh sách N bài tập miễn phí theo danh mục
+ */
+async function getFreeProblemList(limit = 50, skip = 0, category = "algorithms") {
+    const categoryMap = { database: "database-problems", javascript: "javascript", pandas: "pandas", shell: "shell" };
     const query = `
-    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
-      problemsetQuestionList: questionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) {
+    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int) {
+      problemsetQuestionList: questionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: {}) {
         data { titleSlug isPaidOnly }
       }
     }`;
 
-    const variables = {
-        categorySlug: categoryMap[category.toLowerCase()] ?? "", 
-        skip: skip,
-        limit: limit,
-        filters: {} 
-    };
-
     try {
-        const response = await axios.post(LEETCODE_GRAPHQL_URL, { query, variables }, { headers: COMMON_HEADERS });
-        const list = response.data.data.problemsetQuestionList.data;
-        
-        // Lọc bỏ những bài bắt trả phí (Premium)
-        return list.filter(q => !q.isPaidOnly).map(q => q.titleSlug);
+        const res = await fetchLeetCode(query, { categorySlug: categoryMap[category.toLowerCase()] || "", skip, limit });
+        return res?.problemsetQuestionList?.data?.filter(q => !q.isPaidOnly).map(q => q.titleSlug) || [];
     } catch (error) {
-        console.error(`   [Extractor] ✘ Lỗi lấy danh sách bài tập:`, error.message);
+        console.error(`   [Extractor] ✘ Lỗi lấy danh sách bài tập [${category}]:`, error.message);
         return [];
     }
 }
 
-// Giữ nguyên hàm kéo chi tiết bài tập
+/**
+ * Cào chi tiết một bài tập và lưu file JSON thô
+ */
 async function fetchAndSaveRawData(slug) {
     const query = `
     query questionContent($titleSlug: String!) {
@@ -55,14 +53,10 @@ async function fetchAndSaveRawData(slug) {
     }`;
 
     try {
-        const response = await axios.post(LEETCODE_GRAPHQL_URL, { query, variables: { titleSlug: slug } }, { headers: COMMON_HEADERS });
-        const data = response.data.data.question;
+        const res = await fetchLeetCode(query, { titleSlug: slug });
+        if (!res?.question) throw new Error("Bài tập Premium hoặc link lỗi");
 
-        if (!data) throw new Error("Không lấy được dữ liệu từ API");
-
-        const filePath = path.join(tempDir, `${slug}.json`);
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-        
+        fs.writeFileSync(path.join(tempDir, `${slug}.json`), JSON.stringify(res.question, null, 2), 'utf-8');
         console.log(`   [Extractor] ✔ Đã cào và lưu thô: ${slug}.json`);
         return true;
     } catch (error) {
