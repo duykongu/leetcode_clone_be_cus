@@ -194,3 +194,64 @@ npx prisma format # Format schema
 ## License
 
 ISC
+
+
+
+
+
+# Hướng dẫn Setup Môi trường Docker bằng 1 lệnh duy nhất
+
+## 1. Tải tất cả các Docker Images
+
+Chạy lệnh gộp dưới đây tùy thuộc vào Shell bạn đang mở:
+
+### Cho PowerShell:
+```powershell
+docker pull gcc:latest; docker pull eclipse-temurin:17-jdk-alpine; docker pull python:3.9-slim; docker pull node:18-alpine
+```
+
+### Cho CMD (Command Prompt):
+```cmd
+docker pull gcc:latest && docker pull eclipse-temurin:17-jdk-alpine && docker pull python:3.9-slim && docker pull node:18-alpine
+```
+
+## 2. Cài đặt thêm thư viện ở Frontend
+Di chuyển vào thư mục `leetcode_fe` và chạy:
+```bash
+npm install axios
+```
+
+
+===============
+**HƯỚNG DẪN CẬP NHẬT DỮ LIỆU BÀI TẬP (CƠ CHẾ DYNAMIC METADATA)**
+
+- **Nếu database rỗng hoặc muốn lấy bài mới:** Chỉ cần chạy lệnh `node "Script Tool.js"`.
+- **Nếu đã có sẵn data nhưng bị thiếu cấu trúc chấm code (metadata):** Cũng chỉ cần chạy lại lệnh `node "Script Tool.js"`. Hệ thống sẽ tự động quét, ghi đè (upsert) và bổ sung chuẩn xác `metadata` từ LeetCode vào các bài tập cũ mà không làm mất code mẫu.
+
+===============
+
+cài thư viện cho typescript 
+mở terminal chạy trong dự án
+-> npm install -g typescript
+sau đó chạy tiếp -> tsc -v
+================
+3.Custom Docker Images (C++ và Java)
+Đây là bước quan trọng nhất. Máy mới cần phải có 2 file Dockerfile và thực thi lệnh đúc Image để nhúng thư viện JSON vào trong.
+
+A.C++ (gcc-leetcode)
+
+mở file đã tạo tên là Dockerfile.cpp tại thư mục gốc Backend
+
+-> docker build -t gcc-leetcode -f Dockerfile.cpp .
+
+
+B.Java (java-leetcode)
+
+file tên là Dockerfile.java tại thư mục gốc Backend
+
+ -> docker build -t java-leetcode -f Dockerfile.java .
+
+4. Kiểm tra thành quả
+Sau khi người mới chạy xong các lệnh trên, bảo họ gõ lệnh này để kiểm tra xem "đồ nghề" đã đủ chưa:
+
+-> docker images

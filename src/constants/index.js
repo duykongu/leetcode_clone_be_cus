@@ -25,8 +25,33 @@ const PROBLEM_DIFFICULTY = {
   HARD: 2,
 };
 
+
+// config cho kiểu data
+const TYPE_MAP = {
+"java": {
+    "integer": "int",
+    "integer[]": "int[]",
+    "string": "String",
+    "string[]": "String[]",
+    "boolean": "boolean",
+    "boolean[]": "boolean[]",
+    "listNode": "ListNode",
+    "treeNode": "TreeNode"
+  },
+  "cpp": {
+    "integer": "int",
+    "integer[]": "vector<int>",
+    "string": "string",
+    "string[]": "vector<string>",
+    "boolean": "bool",
+    "listNode": "ListNode*",
+    "treeNode": "TreeNode*"
+  }
+};
+
 module.exports = {
   HTTP_STATUS,
   SUBMISSION_STATUS,
   PROBLEM_DIFFICULTY,
+  TYPE_MAP 
 };
