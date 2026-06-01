@@ -1,26 +1,25 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const authRoutes = require('./src/routes/auth.routes');
-const problemsRoutes = require('./src/routes/problems.routes');
-const userRoutes = require('./src/routes/user.routes');
-const executionRoutes = require('./src/routes/execution.routes');
-const app = express();
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/api/execute', executionRoutes);
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Routes
-app.use('/api', authRoutes);
-app.use('/api', userRoutes);
-app.use('/api/problems', problemsRoutes);
+  const express = require('express');
+  const cors = require('cors');
+  const authRoutes        = require('./src/routes/auth.routes');
+  const problemsRoutes    = require('./src/routes/problems.routes');
+  const userRoutes        = require('./src/routes/user.routes');
+  const executionRoutes   = require('./src/routes/execution.routes');
+  const scraperRoutes     = require('./src/routes/scraper.routes');   // <-- THÊM
+  const app = express();
+ 
+  app.use(cors());
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+ 
+  app.use('/api/execute', executionRoutes);
+  app.use('/api/admin/scraper', scraperRoutes);                       // <-- THÊM
+ 
+  app.get('/health', (req, res) => res.json({ status: 'OK' }));
+ 
+  app.use('/api', authRoutes);
+  app.use('/api', userRoutes);
+  app.use('/api/problems', problemsRoutes);
 
 // 404 Handler
 app.use((req, res) => {

@@ -7,23 +7,17 @@ const { PERMISSIONS } = require("../constants/permissions");
 class AuthMiddleware {
   async authenticate(req, res, next) {
     try {
+      let token = null;
       const authHeader = req.headers.authorization;
-
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-          success: false,
-          message: 'No token provided',
-          code: 'MISSING_TOKEN',
-        });
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      } else if (req.query?.token) {
+        token = req.query.token;       
       }
-
-      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
+      
       if (!token) {
         return res.status(HTTP_STATUS.UNAUTHORIZED).json({
-          success: false,
-          message: 'Invalid token format',
-          code: 'INVALID_TOKEN_FORMAT',
+          success: false, message: 'No token provided', code: 'MISSING_TOKEN',
         });
       }
 
@@ -77,29 +71,37 @@ class AuthMiddleware {
 
   async optionalAuth(req, res, next) {
     try {
+      let token = null;
       const authHeader = req.headers.authorization;
-
       if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.substring(7);
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-
-        const user = await userRepo.findById(decoded.id, {
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            role: true,
-            createdAt: true,
-            avatarUrl: true,
-          },
-        });
-
-        if (user) {
-          req.user = user;
-        }
+        token = authHeader.substring(7);
+      } else if (req.query?.token) {
+        token = req.query.token; // ← fallback cho SSE EventSource
       }
+      
+      // SỬA TẠI ĐÂY: Vì là optional, nếu KHÔNG có token thì cho đi tiếp luôn chứ không trả lỗi 401
+      if (!token) {
+        return next();
+      }
+      
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
 
-      next();
+      const user = await userRepo.findById(decoded.id, {
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          role: true,
+          createdAt: true,
+          avatarUrl: true,
+        },
+      });
+
+      if (user) {
+        req.user = user;
+      }
+      
+      next(); // Đưa next() vào trong khối try để chạy tuần tự sau khi lấy xong user
     } catch (err) {
       // For optional auth, just continue even if token is invalid
       next();
