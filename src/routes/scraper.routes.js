@@ -18,9 +18,7 @@ router.post('/start', scraperController.startScrape);
 router.post('/stop', scraperController.stopScrape);
 router.get('/status', scraperController.getStatus);
 
-// SSE endpoint — không dùng requirePermission middleware ở đây vì SSE cần headers
-// đặc biệt, nên authenticate riêng trong controller nếu cần.
-// Hoặc giữ nguyên router.use ở trên, Express middleware vẫn chạy trước.
+// SSE endpoint — nhận luồng sự kiện real-time từ tiến trình cào bài
 router.get('/progress', scraperController.streamProgress);
 
 module.exports = router;
