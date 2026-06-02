@@ -8,7 +8,8 @@
 const { HTTP_STATUS } = require('../constants');
 const { runBatchScrape, getJobStatus, stopJob, scraperEmitter } = require('../services/scraper.service');
 
-const VALID_CATEGORIES = ['algorithms', 'database', 'javascript', 'pandas', 'shell'];
+// SỬA TẠI ĐÂY: Chỉ giữ lại 2 danh mục hợp lệ đồng bộ với FE
+const VALID_CATEGORIES = ['algorithms', 'javascript'];
 
 class ScraperController {
   /**
@@ -19,32 +20,25 @@ class ScraperController {
     try {
       let { limit, categories } = req.body;
 
-      // Chuẩn hóa và Validate limit (Cho phép limit = 0 để kích hoạt Siêu Cào Toàn Bộ)
+      // Validate limit
       limit = parseInt(limit);
-      if (isNaN(limit) || limit < 0) limit = 10; 
+      if (isNaN(limit) || limit < 1) limit = 10;
       if (limit > 500) limit = 500;
 
-      // Validate danh sách categories truyền lên từ UI
+      // Validate categories
       if (!Array.isArray(categories) || categories.length === 0) {
-        categories = ['algorithms'];
+        categories = ['algorithms', 'javascript']; // Mặc định chọn cả hai danh mục mới
       }
       categories = categories.filter((c) => VALID_CATEGORIES.includes(c));
-      if (categories.length === 0) categories = ['algorithms'];
+      if (categories.length === 0) categories = ['algorithms', 'javascript'];
 
-      // Nếu người dùng chọn cào toàn bộ (limit === 0), truyền toàn bộ mảng VALID_CATEGORIES để manager quét sạch
-      const finalCategories = limit === 0 ? VALID_CATEGORIES : categories;
-
-      const result = await runBatchScrape({ limit, categories: finalCategories });
+      const result = await runBatchScrape({ limit, categories });
 
       if (!result.success) {
         return res.status(HTTP_STATUS.CONFLICT).json({ success: false, message: result.message });
       }
 
-      res.json({ 
-        success: true, 
-        jobId: result.jobId, 
-        message: limit === 0 ? 'Chế độ SIÊU CÀO TOÀN BỘ KHO đã khởi động.' : 'Job cào theo lô đã khởi động.' 
-      });
+      res.json({ success: true, jobId: result.jobId, message: 'Job cào đã được khởi động.' });
     } catch (err) {
       res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
@@ -66,13 +60,14 @@ class ScraperController {
   };
 
   /**
-   * GET /api/admin/scraper/progress (SSE)
+   * GET /api/admin/scraper/progress  (SSE)
    */
   streamProgress = (req, res) => {
+    // SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); 
+    res.setHeader('X-Accel-Buffering', 'no'); // Tắt buffering cho Nginx
     res.flushHeaders();
 
     const send = (event, data) => {
@@ -80,15 +75,18 @@ class ScraperController {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
+    // Gửi trạng thái hiện tại ngay khi connect
     const currentStatus = getJobStatus();
     send('connected', { message: 'SSE kết nối thành công', status: currentStatus });
 
+    // Nếu có job đang chạy, gửi lại lịch sử log gần nhất
     if (currentStatus.running && currentStatus.log) {
       currentStatus.log.slice(-30).forEach((entry) => {
         send(entry.event, entry.data);
       });
     }
 
+    // Subscribe vào emitter
     const handlers = {
       start: (data) => send('start', data),
       log: (data) => send('log', data),
@@ -101,10 +99,12 @@ class ScraperController {
       scraperEmitter.on(event, handler);
     });
 
+    // Heartbeat mỗi 25 giây để giữ connection
     const heartbeat = setInterval(() => {
       res.write(': heartbeat\n\n');
     }, 25000);
 
+    // Cleanup khi client ngắt kết nối
     req.on('close', () => {
       clearInterval(heartbeat);
       Object.entries(handlers).forEach(([event, handler]) => {

@@ -19,26 +19,66 @@ async function fetchLeetCode(query, variables) {
 }
 
 /**
- * Lấy danh sách N bài tập miễn phí theo danh mục
+ * Lấy danh sách N bài tập miễn phí theo danh mục (Hỗ trợ cào cuốn chiếu từng đợt 50 bài)
+ */
+/**
+ * Lấy danh sách N bài tập miễn phí theo danh mục (Sửa đổi payload filter chuẩn hóa Core LeetCode)
  */
 async function getFreeProblemList(limit = 50, skip = 0, category = "algorithms") {
-    const categoryMap = { database: "database-problems", javascript: "javascript", pandas: "pandas", shell: "shell" };
+    // Bản đồ map chuẩn core LeetCode: danh mục tổng quát Algorithms dùng slug rỗng ""
+    const categoryMap = { 
+        "algorithms": "", 
+        "javascript": "javascript",
+        "": ""
+    };
+    
     const query = `
-    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int) {
-      problemsetQuestionList: questionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: {}) {
+    query problemsetQuestionList($categorySlug: String, $limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
+      problemsetQuestionList: questionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) {
         data { titleSlug isPaidOnly }
       }
     }`;
 
     try {
-        const res = await fetchLeetCode(query, { categorySlug: categoryMap[category.toLowerCase()] || "", skip, limit });
+        const cleanCategory = String(category || "").toLowerCase().trim();
+        const targetCategory = categoryMap[cleanCategory] !== undefined ? categoryMap[cleanCategory] : "";
+        
+        // CẤU HÌNH BIẾN CHUẨN: Giữ nguyên object filters trống '{}' cho cả 2 danh mục để kích hoạt kho bài ẩn danh
+        const variables = { 
+            categorySlug: targetCategory, 
+            skip: parseInt(skip) || 0, 
+            limit: parseInt(limit) || 50, 
+            filters: {} 
+        };
+
+        // Tạo chuỗi mã token ngẫu nhiên thay đổi liên tục trên mỗi đợt skip để bẻ gãy hoàn toàn cache mạng
+        const headersWithNoCache = {
+            ...COMMON_HEADERS,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Bypass-Nonce': Math.random().toString(36).substring(7),
+            'X-Pagination-Skip': String(skip)
+        };
+
+        const { data } = await axios.post(
+            LEETCODE_GRAPHQL_URL, 
+            { query, variables }, 
+            { headers: headersWithNoCache }
+        );
+
+        if (data.errors) {
+            console.error(`   [Extractor] ✘ API LeetCode báo lỗi tại vị trí skip ${skip}:`, data.errors[0].message);
+            return [];
+        }
+        
+        const res = data.data;
         return res?.problemsetQuestionList?.data?.filter(q => !q.isPaidOnly).map(q => q.titleSlug) || [];
     } catch (error) {
-        console.error(`   [Extractor] ✘ Lỗi lấy danh sách bài tập [${category}]:`, error.message);
+        console.error(`   [Extractor] ✘ Lỗi kết nối lấy danh sách [${category}] ở vị trí skip ${skip}:`, error.message);
         return [];
     }
 }
-
 /**
  * Cào chi tiết một bài tập và lưu file JSON thô
  */

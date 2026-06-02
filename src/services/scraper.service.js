@@ -26,6 +26,9 @@ function getJobStatus() {
   return { running: true, ...activeJob };
 }
 
+/**
+ * Dừng job đang chạy
+ */
 function stopJob() {
   if (activeJob) {
     activeJob.stopRequested = true;
@@ -38,7 +41,6 @@ function stopJob() {
 function emit(event, data) {
   scraperEmitter.emit(event, data);
   if (activeJob) {
-    // Ghi vào log của job để SSE client mới connect vẫn lấy được history
     activeJob.log = activeJob.log || [];
     activeJob.log.push({ event, data, ts: Date.now() });
     if (activeJob.log.length > 500) activeJob.log.shift(); // giới hạn bộ nhớ
@@ -46,11 +48,9 @@ function emit(event, data) {
 }
 
 /**
- * Chạy pipeline cào batch:
- * - limit: số bài tối đa cần cào mới (bỏ qua bài đã tồn tại)
- * - categories: mảng các danh mục ['algorithms','database',...]
+ * Chạy pipeline cào batch theo số lượng N bài yêu cầu từ FE
  */
-async function runBatchScrape({ limit = 50, categories = ['algorithms'] }) {
+async function runBatchScrape({ limit = 50, categories = ['algorithms', 'javascript'] }) {
   if (activeJob && !activeJob.done) {
     return { success: false, message: 'Đang có job đang chạy. Vui lòng đợi hoặc dừng trước.' };
   }
@@ -78,139 +78,147 @@ async function runBatchScrape({ limit = 50, categories = ['algorithms'] }) {
   return { success: true, jobId: activeJob.id };
 }
 
+/**
+ * Luồng execute pipeline gốc lấy đúng 229 bài mặc định trang đầu
+ */
 async function _executePipeline(job) {
-  const CATEGORIES_MAP = {
-    algorithms: '',
-    database: 'database-problems',
-    javascript: 'javascript',
-    pandas: 'pandas',
-    shell: 'shell',
-  };
-
   emit('start', {
     jobId: job.id,
     limit: job.limit,
     categories: job.categories,
-    message: `🚀 Bắt đầu job cào: ${job.limit} bài, danh mục: ${job.categories.join(', ')}`,
+    message: `🚀 Bắt đầu job cào cuốn chiếu: Mục tiêu ${job.limit} bài mới, danh mục: ${job.categories.join(', ')}`,
   });
 
   try {
-    // --- Bước 1: Thu thập danh sách slug từ tất cả category được chọn ---
-    let allSlugs = [];
+    let newlyInserted = 0; // Số bài mới thực tế đã lưu thành công
+    let currentVirtualIndex = 0; // Chỉ số chạy giả lập cho FE hiển thị thanh tiến độ
+    
+    // Đặt kích thước mỗi đợt lấy danh sách là 50 bài theo yêu cầu của bạn
+    const BATCH = 50; 
 
     for (const cat of job.categories) {
-      if (job.stopRequested) break;
+      if (job.stopRequested || newlyInserted >= job.limit) break;
 
-      emit('log', { message: `📁 Đang lấy danh sách bài từ danh mục: ${cat.toUpperCase()}...` });
+      emit('log', { message: `📁 Bắt đầu xử lý danh mục: ${cat.toUpperCase()}` });
 
-      const BATCH = 200; // lấy 200 slug mỗi lần gọi API để đảm bảo đủ bài sau khi lọc
       let skip = 0;
-      let catSlugs = [];
-      let hasMore = true;
+      let hasMoreInCat = true;
 
-      while (hasMore && catSlugs.length < job.limit * 2) {
+      // VÒNG LẶP CUỐN CHIẾU: Lấy 50 bài -> Cào luôn -> Thiếu thì lấy tiếp 50 bài
+      while (hasMoreInCat && newlyInserted < job.limit) {
+        if (job.stopRequested) break;
+
+        emit('log', { message: `🔍 Đang lấy ${BATCH} đề mục LeetCode (vị trí skip: ${skip})...` });
+        
+        // Gọi API lấy đúng 50 bài từ extractor
         const slugs = await getFreeProblemList(BATCH, skip, cat);
-        if (!slugs || slugs.length === 0) { hasMore = false; break; }
-        catSlugs = catSlugs.concat(slugs);
-        if (slugs.length < BATCH) { hasMore = false; break; }
+
+        if (!slugs || slugs.length === 0) {
+          emit('log', { message: `🏁 Đã quét hết toàn bộ kho bài của danh mục [${cat.toUpperCase()}].` });
+          hasMoreInCat = false;
+          break;
+        }
+
+        emit('log', { message: `📥 Lấy thành công ${slugs.length} đề mục. Bắt đầu sàng lọc và cào ngay...` });
+
+        // Tăng tổng số lượng hàng đợi trên giao diện động theo số bài vừa lấy về
+        job.totalQueued += slugs.length;
+
+        // Duyệt qua lô 50 bài vừa lấy được để xử lý lập tức
+        for (const slug of slugs) {
+          if (job.stopRequested || newlyInserted >= job.limit) break;
+
+          currentVirtualIndex++;
+          job.currentIndex = currentVirtualIndex;
+
+          // Kiểm tra trùng trong cơ sở dữ liệu
+          const exists = await isProblemExists(slug);
+          if (exists) {
+            job.skipped++;
+            emit('progress', {
+              current: job.currentIndex,
+              total: job.totalQueued,
+              inserted: job.inserted,
+              skipped: job.skipped,
+              failed: job.failed,
+              slug,
+              result: 'skipped',
+              message: `⏭ [${job.currentIndex}] ${slug}: đã có trong DB (bỏ qua)`,
+            });
+            continue;
+          }
+
+          // Tiến hành cào dữ liệu thô từ LeetCode
+          const extracted = await fetchAndSaveRawData(slug);
+          if (!extracted) {
+            job.failed++;
+            emit('progress', {
+              current: job.currentIndex,
+              total: job.totalQueued,
+              inserted: job.inserted,
+              skipped: job.skipped,
+              failed: job.failed,
+              slug,
+              result: 'failed',
+              message: `❌ [${job.currentIndex}] ${slug}: lỗi kết nối cào mạng`,
+            });
+            await sleep(1500);
+            continue;
+          }
+
+          // Phân tích cú pháp JSON và lưu vào Database
+          const saved = await processJsonFile(slug);
+          if (saved) {
+            job.inserted++;
+            newlyInserted++; // Tăng chỉ tiêu bài mới thành công
+            emit('progress', {
+              current: job.currentIndex,
+              total: job.totalQueued,
+              inserted: job.inserted,
+              skipped: job.skipped,
+              failed: job.failed,
+              slug,
+              result: 'inserted',
+              message: `✔ [${job.currentIndex}] ${slug}: THÊM MỚI THÀNH CÔNG (${newlyInserted}/${job.limit})`,
+            });
+          } else {
+            job.failed++;
+            emit('progress', {
+              current: job.currentIndex,
+              total: job.totalQueued,
+              inserted: job.inserted,
+              skipped: job.skipped,
+              failed: job.failed,
+              slug,
+              result: 'failed',
+              message: `❌ [${job.currentIndex}] ${slug}: lỗi xử lý/lưu DB`,
+            });
+          }
+
+          // Khoảng nghỉ an toàn giữa các bài cào chi tiết chống bị chặn IP
+          await sleep(1800);
+        }
+
+        // Nếu LeetCode trả về ít hơn 50 bài, tức là danh mục này đã cạn bài tập
+        if (slugs.length < BATCH) {
+          hasMoreInCat = false;
+          break;
+        }
+
+        // Tăng biến skip lên 50 để chuẩn bị lật trang tiếp theo nếu chưa đủ chỉ tiêu N bài
         skip += BATCH;
-        await sleep(800);
+        
+        // Nghỉ ngắn giữa các đợt lấy danh sách
+        await sleep(1000);
       }
-
-      emit('log', { message: `   → Tìm thấy ${catSlugs.length} bài miễn phí trong [${cat}]` });
-      allSlugs = allSlugs.concat(catSlugs);
     }
 
-    // Deduplicate
-    allSlugs = [...new Set(allSlugs)];
-    job.totalQueued = allSlugs.length;
-
-    emit('log', { message: `📋 Tổng danh sách slug thu thập: ${allSlugs.length} bài` });
-
-    // --- Bước 2: Cào từng bài cho đến khi đủ limit ---
-    let newlyInserted = 0;
-
-    for (let i = 0; i < allSlugs.length; i++) {
-      if (job.stopRequested) {
-        emit('log', { message: '🛑 Job bị dừng bởi người dùng.' });
-        break;
-      }
-      if (newlyInserted >= job.limit) {
-        emit('log', { message: `✅ Đã đạt giới hạn ${job.limit} bài mới. Dừng cào.` });
-        break;
-      }
-
-      const slug = allSlugs[i];
-      job.currentIndex = i + 1;
-
-      // Kiểm tra đã có trong DB chưa
-      const exists = await isProblemExists(slug);
-      if (exists) {
-        job.skipped++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'skipped',
-          message: `⏭ [${i + 1}] ${slug}: đã tồn tại`,
-        });
-        continue;
-      }
-
-      // Cào raw data
-      const extracted = await fetchAndSaveRawData(slug);
-      if (!extracted) {
-        job.failed++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'failed',
-          message: `❌ [${i + 1}] ${slug}: lỗi cào mạng`,
-        });
-        await sleep(1500);
-        continue;
-      }
-
-      // Transform & lưu DB
-      const saved = await processJsonFile(slug);
-      if (saved) {
-        job.inserted++;
-        newlyInserted++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'inserted',
-          message: `✔ [${i + 1}] ${slug}: thêm mới thành công`,
-        });
-      } else {
-        job.failed++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'failed',
-          message: `❌ [${i + 1}] ${slug}: lỗi lưu DB`,
-        });
-      }
-
-      await sleep(1800); // Rate-limit friendly
+    if (newlyInserted >= job.limit) {
+      emit('log', { message: `🎉 Đạt mục tiêu! Đã tìm và cào đủ ${job.limit} bài mới theo yêu cầu.` });
     }
+
   } catch (err) {
-    emit('error', { message: `💥 Lỗi nghiêm trọng: ${err.message}` });
+    emit('error', { message: `💥 Lỗi nghiêm trọng trong tiến trình cào cuốn chiếu: ${err.message}` });
   } finally {
     job.done = true;
     job.endTime = new Date().toISOString();
@@ -220,7 +228,7 @@ async function _executePipeline(job) {
       inserted: job.inserted,
       skipped: job.skipped,
       failed: job.failed,
-      message: `🎉 Hoàn tất! Thêm mới: ${job.inserted} | Bỏ qua: ${job.skipped} | Lỗi: ${job.failed}`,
+      message: `🎉 Hoàn tất tiến trình! Đã thêm thành công: ${job.inserted} bài mới | Bỏ qua trùng: ${job.skipped} | Lỗi: ${job.failed}`,
     });
 
     await disconnectDB();
