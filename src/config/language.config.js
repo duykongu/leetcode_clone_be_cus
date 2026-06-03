@@ -3,6 +3,92 @@
 // ==========================================
 const { TYPE_MAP } = require('../constants');
 const path = require('path');
+
+// ==========================================
+// CẤU TRÚC DỮ LIỆU DÙNG CHUNG CỦA LEETCODE
+// ==========================================
+const COMMON_STRUCTURES = {
+  python: `
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+`,
+  javascript: `
+function ListNode(val, next) {
+    this.val = (val===undefined ? 0 : val)
+    this.next = (next===undefined ? null : next)
+}
+function TreeNode(val, left, right) {
+    this.val = (val===undefined ? 0 : val)
+    this.left = (left===undefined ? null : left)
+    this.right = (right===undefined ? null : right)
+}
+`,
+  typescript: `
+class ListNode {
+    val: number
+    next: ListNode | null
+    constructor(val?: number, next?: ListNode | null) {
+        this.val = (val===undefined ? 0 : val);
+        this.next = (next===undefined ? null : next);
+    }
+}
+class TreeNode {
+    val: number
+    left: TreeNode | null
+    right: TreeNode | null
+    constructor(val?: number, left?: TreeNode | null, right?: TreeNode | null) {
+        this.val = (val===undefined ? 0 : val);
+        this.left = (left===undefined ? null : left);
+        this.right = (right===undefined ? null : right);
+    }
+}
+`,
+  cpp: `
+struct ListNode {
+    int val;
+    ListNode *next;
+    ListNode() : val(0), next(nullptr) {}
+    ListNode(int x) : val(x), next(nullptr) {}
+    ListNode(int x, ListNode *next) : val(x), next(next) {}
+};
+struct TreeNode {
+    int val;
+    TreeNode *left;
+    TreeNode *right;
+    TreeNode() : val(0), left(nullptr), right(nullptr) {}
+    TreeNode(int x) : val(x), left(nullptr), right(nullptr) {}
+    TreeNode(int x, TreeNode *left, TreeNode *right) : val(x), left(left), right(right) {}
+};
+`,
+  java: `
+class ListNode {
+    int val;
+    ListNode next;
+    ListNode() {}
+    ListNode(int val) { this.val = val; }
+    ListNode(int val, ListNode next) { this.val = val; this.next = next; }
+}
+class TreeNode {
+    int val;
+    TreeNode left;
+    TreeNode right;
+    TreeNode() {}
+    TreeNode(int val) { this.val = val; }
+    TreeNode(int val, TreeNode left, TreeNode right) {
+        this.val = val;
+        this.left = left;
+        this.right = right;
+    }
+}
+`
+};
 const LANGUAGE_CONFIG = {
   "python": {
     image: "python:3.9-slim",
@@ -13,7 +99,7 @@ const LANGUAGE_CONFIG = {
       const methodName = metadata.name || "main";
       return `import sys
 import json
-
+${COMMON_STRUCTURES.javascript}
 ${userCode}
 
 def _run_wrapper():
@@ -50,7 +136,7 @@ if __name__ == '__main__':
       const methodName = metadata.name || "main";
       return `
 const fs = require('fs');
-
+${COMMON_STRUCTURES.javascript}
 ${userCode}
 
 function _run_wrapper() {
@@ -101,7 +187,7 @@ _run_wrapper();`;
       return `
 declare var require: any;
 const fs = require('fs');
-
+${COMMON_STRUCTURES.javascript}
 ${userCode}
 
 function _run_wrapper() {
@@ -169,7 +255,7 @@ _run_wrapper();`;
 #include <json.hpp>
 using namespace std;
 using json = nlohmann::json;
-
+${COMMON_STRUCTURES.javascript}
 ${userCode}
 
 int main() {
@@ -216,7 +302,7 @@ ${readParamsCode}
 import java.util.*;
 import java.io.*;
 import com.google.gson.*;
-
+${COMMON_STRUCTURES.javascript}
 ${userCode}
 
 public class Main {

@@ -5,6 +5,8 @@ const authRoutes = require('./src/routes/auth.routes');
 const problemsRoutes = require('./src/routes/problems.routes');
 const userRoutes = require('./src/routes/user.routes');
 const executionRoutes = require('./src/routes/execution.routes');
+const announcementRoutes = require('./src/routes/announcement.routes');
+const discussionRoutes = require('./src/routes/discussion.routes');
 const app = express();
 
 // Middleware
@@ -12,6 +14,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/api/execute', executionRoutes);
+
+app.use('/api/announcements', announcementRoutes);
+app.use('/api/discussions', discussionRoutes);
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
