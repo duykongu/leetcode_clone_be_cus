@@ -14,9 +14,12 @@ require('dotenv').config();
  
   app.use('/api/execute', executionRoutes);
   app.use('/api/admin/scraper', scraperRoutes);                       // <-- THÊM
- 
+
+  // Serve uploaded files
+  app.use('/uploads', express.static('uploads'));
+
   app.get('/health', (req, res) => res.json({ status: 'OK' }));
- 
+  
   app.use('/api', authRoutes);
   app.use('/api', userRoutes);
   app.use('/api/problems', problemsRoutes);
