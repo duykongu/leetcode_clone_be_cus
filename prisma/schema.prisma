@@ -60,6 +60,10 @@ model User {
   submissions   Submission[]
   userProblems  UserProblemStatus[]
   refreshTokens RefreshToken[]
+  
+  announcements Announcement[]
+  discussions   Discussion[]
+  comments      Comment[]
 
   @@map("users")
 }
@@ -115,6 +119,8 @@ model Problem {
   examples      ProblemExample[]
   constraints   ProblemConstraint[]
 
+  discussions   Discussion[]
+  
   @@map("problems")
 }
 
@@ -238,4 +244,59 @@ model ProblemConstraint {
   problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
 
   @@map("problem_constraints")
+}
+/// ================= ANNOUNCEMENTS =================
+model Announcement {
+  id        String   @id @default(uuid()) @db.Char(36)
+  title     String   @db.VarChar(255)
+  content   String   @db.LongText
+  isPinned  Boolean  @default(false) @map("is_pinned") // Thêm cờ ghim cho Admin
+  authorId  String   @map("author_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@map("announcements")
+}
+
+/// ================= DISCUSSIONS =================
+model Discussion {
+  id        String   @id @default(uuid()) @db.Char(36)
+  problemId String?  @map("problem_id") @db.Char(36) // Null nếu là thảo luận chung
+  userId    String   @map("user_id") @db.Char(36)
+  title     String   @db.VarChar(255)
+  content   String   @db.LongText
+  tags      Json?    // Lưu mảng tags ví dụ: ["Python", "Algorithm"]
+  isPinned  Boolean  @default(false) @map("is_pinned") 
+  upvotes   Int      @default(0)
+  views     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem   Problem?  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  comments  Comment[]
+
+  @@map("discussions")
+}
+
+/// ================= COMMENTS =================
+model Comment {
+  id           String   @id @default(uuid()) @db.Char(36)
+  discussionId String   @map("discussion_id") @db.Char(36)
+  userId       String   @map("user_id") @db.Char(36)
+  content      String   @db.Text
+  parentId     String?  @map("parent_id") @db.Char(36) // Dùng để reply bình luận
+  upvotes      Int      @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+  
+  parent       Comment?   @relation("CommentToComment", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      Comment[]  @relation("CommentToComment")
+
+  @@map("comments")
 }

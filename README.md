@@ -251,6 +251,10 @@ file tên là Dockerfile.java tại thư mục gốc Backend
 
  -> docker build -t java-leetcode -f Dockerfile.java .
 
+
+ cài typescript:
+ docker build -t ts-leetcode -f Dockerfile.ts .
+
 4. Kiểm tra thành quả
 Sau khi người mới chạy xong các lệnh trên, bảo họ gõ lệnh này để kiểm tra xem "đồ nghề" đã đủ chưa:
 
