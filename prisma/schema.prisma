@@ -48,6 +48,7 @@ model User {
   email         String   @unique @db.VarChar(255)
   passwordHash  String  @map("password_hash") @db.VarChar(255)
   avatarUrl     String?  @map("avatar_url") @db.VarChar(500)
+  birthday      DateTime? @map("birthday") @db.Date
   role          Role     @default(user)
   solvedCount   Int      @default(0) @map("solved_count")
   streakDays    Int      @default(0) @map("streak_days")
