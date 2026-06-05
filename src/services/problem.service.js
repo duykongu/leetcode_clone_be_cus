@@ -20,7 +20,7 @@ class problemsService {
     };
   }
 
-  async getProblems(page = 1, limit = 50, user = null, filters = {}) {
+  async getProblems(page = 1, limit = 10, user = null, filters = {}) {
     const { search, category, difficulty } = filters;
     const canViewHidden = can(user, PERMISSIONS.VIEW_HIDDEN_PROBLEMS);
     const userId = user?.id;

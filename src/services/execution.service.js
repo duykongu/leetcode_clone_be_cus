@@ -52,25 +52,25 @@ class ExecutionService {
       if (config.compileCmd) {
         const compileResult = await dockerUtil.compileCode(config.compileCmd, runDir);
         if (!compileResult.success) {
-          return await submissionRepository.saveSubmissionRecord(
-            userId, problemId, language, code, SUBMISSION_STATUS.COMPILE_ERROR, 0, testCases.length, compileResult.error
-          );
+        //Xử lý "Chạy Test" vs "Nộp Bài"
+          //nếu chạy test thì ko lưu
+          if (!isSubmit) {
+            return { success: finalStatus === SUBMISSION_STATUS.ACCEPTED, status: finalStatus, passed: passedCases, total: testCases.length, message: errorMessage, submissionId: null };
+          }
+          //nếu nộp thì lưu
+           return await submissionRepository.saveSubmissionRecord(
+               userId, problemId, language, code, finalStatus, passedCases, testCases.length, errorMessage
+           );
         }
       }
 
-      // 5. Chạy test case
+// 5. Chạy test case
       let passedCases = 0;
       let finalStatus = SUBMISSION_STATUS.ACCEPTED;
       let errorMessage = "";
 
       for (const tc of testCases) {
-        // 🛡️ SAFEGUARD: Ép về String trước khi gọi chuỗi replace
-        let cleanInput = String(tc.input || "")
-            .replace(/^input:\s*/i, '')
-            .trim()
-            .replace(/[a-zA-Z_]+\s*=\s*/g, '')
-            .trim();
-
+        let cleanInput = String(tc.input || "").replace(/^input:\s*/i, '').trim().replace(/[a-zA-Z_]+\s*=\s*/g, '').trim();
         const runResult = await dockerUtil.executeSingleTestCase(config.runArgs(runDir), cleanInput);
 
         if (runResult.status === SUBMISSION_STATUS.TIME_LIMIT_EXCEEDED || runResult.status === SUBMISSION_STATUS.RUNTIME_ERROR) {
@@ -84,13 +84,21 @@ class ExecutionService {
           errorMessage = `Input: ${tc.input}\nExpected: ${tc.expectedOutput}\nGot: ${runResult.output}`;
           break; 
         }
-        passedCases++; 
+        passedCases++;
       }
 
-      // 6. Lưu kết quả
+      // ================= SỬA LỖI Ở ĐÂY =================
+      // 6. Xử lý "Chạy Test" vs "Nộp Bài"
+      if (!data.isSubmit) {
+        // NẾU CHỈ LÀ CHẠY CODE -> Trả về luôn, không lưu Database
+        return { success: finalStatus === SUBMISSION_STATUS.ACCEPTED, status: finalStatus, passed: passedCases, total: testCases.length, message: errorMessage, submissionId: null };
+      }
+
+      // NẾU LÀ NỘP BÀI -> Gọi Repository để lưu lịch sử và tính Streak
       return await submissionRepository.saveSubmissionRecord(
         userId, problemId, language, code, finalStatus, passedCases, testCases.length, errorMessage
       );
+      // =================================================
 
     } finally {
       // 7. Dọn dẹp

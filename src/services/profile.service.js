@@ -11,6 +11,7 @@ class ProfileService {
         role: true,
         createdAt: true,
         avatarUrl: true,
+        birthday: true,
         solvedCount: true,
         streakDays: true,
         lastActive: true,
@@ -55,6 +56,70 @@ class ProfileService {
       difficultyStats,
       submissions,
       recentAC
+    };
+  }
+
+  async updateProfile(userId, data) {
+    const updateData = {};
+
+    if (data.username !== undefined) {
+      if (data.username.length < 3) {
+        throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: "Username phải >= 3 ký tự" };
+      }
+      const existingUser = await userRepo.isUsernameTaken(data.username);
+      if (existingUser) {
+        const currentUser = await userRepo.findById(userId, { select: { username: true } });
+        if (currentUser && currentUser.username !== data.username) {
+          throw { statusCode: HTTP_STATUS.CONFLICT, message: "Username đã tồn tại" };
+        }
+      }
+      updateData.username = data.username;
+    }
+
+    if (data.email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(data.email)) {
+        throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: "Email không hợp lệ" };
+      }
+      const existingEmail = await userRepo.isEmailTaken(data.email);
+      if (existingEmail) {
+        const currentUser = await userRepo.findById(userId, { select: { email: true } });
+        if (currentUser && currentUser.email !== data.email) {
+          throw { statusCode: HTTP_STATUS.CONFLICT, message: "Email đã tồn tại" };
+        }
+      }
+      updateData.email = data.email;
+    }
+
+    if (data.avatarUrl !== undefined) {
+      updateData.avatarUrl = data.avatarUrl || null;
+    }
+
+    if (data.birthday !== undefined) {
+      if (data.birthday) {
+        const birthdayDate = new Date(data.birthday);
+        if (isNaN(birthdayDate.getTime())) {
+          throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: "Ngày sinh không hợp lệ" };
+        }
+        if (birthdayDate > new Date()) {
+          throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: "Ngày sinh không thể ở tương lai" };
+        }
+        updateData.birthday = birthdayDate;
+      } else {
+        updateData.birthday = null;
+      }
+    }
+
+    const updatedUser = await userRepo.update(userId, updateData);
+    return updatedUser;
+  }
+
+  async uploadAvatar(userId, file, baseUrl = '') {
+    const avatarUrl = `${baseUrl}/uploads/avatars/${file.filename}`;
+    const updatedUser = await userRepo.update(userId, { avatarUrl });
+    return {
+      ...updatedUser,
+      avatarUrl,
     };
   }
 }

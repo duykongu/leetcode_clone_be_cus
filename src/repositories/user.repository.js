@@ -59,6 +59,26 @@ class UserRepository extends BaseRepository {
     });
   }
 
+  // Update user profile
+  async update(id, data) {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        avatarUrl: true,
+        birthday: true,
+        createdAt: true,
+        solvedCount: true,
+        streakDays: true,
+        lastActive: true,
+      },
+    });
+  }
+
   // Find all users (for admin)
   async findAll(options = {}) {
     return this.findPaginated(options);

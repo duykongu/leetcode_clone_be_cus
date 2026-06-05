@@ -8,10 +8,10 @@ class ExecutionController {
   runCode = async (req, res) => {
     try {
       // 1. Nhận problemId từ request
-      const { code, language, problemId } = req.body;
+      const { code, language, problemId, isSubmit } = req.body;
       
       // Lấy userId nếu request đã đi qua Auth Middleware (user đã login)
-      const userId = req.user ? req.user.id : null; 
+      const userId = req.user ? req.user.id : null;
       
       if (!code || !language || !problemId) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -21,7 +21,8 @@ class ExecutionController {
       }
 
       // 2. Truyền toàn bộ xuống Service
-      const result = await this.executionService.runCode({ code, language, problemId, userId });
+      const result = await this.executionService.runCode({ code, language, problemId, userId, isSubmit });
+      
       res.json(result);
       
     } catch (err) {
