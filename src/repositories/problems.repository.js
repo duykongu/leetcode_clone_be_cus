@@ -28,6 +28,20 @@ class problemsRepository extends BaseRepository {
       ...(include && { include }),
     });
   }
+
+  async updateProblem(params = {}) {
+    const { where, data, select, include } = params;
+    return await this.prisma.problem.update({
+      where,
+      data,
+      ...(select && { select }),
+      ...(include && { include }),
+    });
+  }
+
+  async deleteProblem(where) {
+    return await this.prisma.problem.delete({ where });
+  }
 }
 
 module.exports = new problemsRepository();

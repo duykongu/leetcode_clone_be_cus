@@ -8,6 +8,8 @@ const ProblemsController = require('./controllers/problems.controller');
 const UserController = require('./controllers/user.controller');
 const ExecutionService = require('./services/execution.service');
 const ExecutionController = require('./controllers/execution.controller');
+const ScraperService = require('./services/scraper.service');
+const ScraperController = require('./controllers/scraper.controller');
 // 1. Instantiate Services
 const tokenService = new TokenService();
 const authService = new AuthService({ tokenService });
@@ -31,9 +33,13 @@ const userController = new UserController({
 const executionController = new ExecutionController({
   executionService, // Bơm service vào controller
 });
+
+const scraperController = new ScraperController();
+
 module.exports = {
   authController,
   problemsController,
   userController,
   executionController,
+  scraperController,
 };

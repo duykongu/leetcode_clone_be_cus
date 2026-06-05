@@ -11,5 +11,7 @@ router.get('/:id', authMiddleware.optionalAuth, problemsController.getProblemDet
 // Admin only routes
 router.get('/admin/stats', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.VIEW_ADMIN_STATS), problemsController.getStats);
 router.post('/import', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.MANAGE_PROBLEMS), problemsController.importProblem);
+router.put('/:id', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.MANAGE_PROBLEMS), problemsController.updateProblem);
+router.delete('/:id', authMiddleware.authenticate, authMiddleware.requirePermission(PERMISSIONS.MANAGE_PROBLEMS), problemsController.deleteProblem);
 
 module.exports = router;

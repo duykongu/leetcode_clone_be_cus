@@ -1,4 +1,5 @@
 const { getPagination } = require('../utils/pagination');
+const { HTTP_STATUS } = require('../constants');
 
 class ProblemsController {
   constructor({ problemService }) {
@@ -22,7 +23,6 @@ class ProblemsController {
       const { page, limit } = getPagination(req.query, 50);
       const user = req.user;
       const filters = {
-        search: req.query.search,
         category: req.query.category,
         difficulty: req.query.difficulty,
       };
@@ -61,6 +61,38 @@ class ProblemsController {
     } catch (err) {
       res.status(err.statusCode || 500).json({
         success: false,
+        message: err.message || 'Error',
+      });
+    }
+  }
+
+  updateProblem = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const data = req.body;
+
+      if (data.difficulty !== undefined && ![0, 1, 2].includes(data.difficulty)) {
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          message: 'Validation error: difficulty must be 0, 1, or 2',
+        });
+      }
+
+      const result = await this.problemService.updateProblem(id, data);
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
+        message: err.message || 'Error',
+      });
+    }
+  }
+
+  deleteProblem = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await this.problemService.deleteProblem(id);
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
         message: err.message || 'Error',
       });
     }

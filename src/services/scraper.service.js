@@ -1,4 +1,3 @@
-require('dotenv').config(); // ✅ ÉP ĐỌC FILE .env TỪ THƯ MỤC GỐC
  
 /**
  * FILE: src/services/scraper.service.js
@@ -11,15 +10,14 @@ require('dotenv').config(); // ✅ ÉP ĐỌC FILE .env TỪ THƯ MỤC GỐC
 const EventEmitter = require('events');
 const fs           = require('fs');
 const path         = require('path');
-const { PrismaClient } = require('@prisma/client');
+
+const prisma = require('../config/database');
  
 const extractorPath   = path.resolve(__dirname, '../tools/scraper/extractor');
 const transformerPath = path.resolve(__dirname, '../tools/scraper/transformer');
  
 const { getFreeProblemList, fetchAndSaveRawData, fetchTargetSolutionCode } = require(extractorPath);
 const { processJsonFile, isProblemExists }                                 = require(transformerPath);
- 
-const prisma = new PrismaClient();
 const sleep  = (ms) => new Promise((r) => setTimeout(r, ms));
  
 // ✅ LOGIC TĂNG TỐC TỰ ĐỘNG NẾU CÓ TOKEN
@@ -108,7 +106,15 @@ async function runBatchScrape({ limit = 100, mode = 'all', categories = ['algori
   if (activeJob && !activeJob.done) {
     return { success: false, message: 'Đang có tác vụ chạy. Vui lòng dừng hoặc chờ hoàn tất.' };
   }
- 
+
+  // Dọn sạch file temp tồn đọng từ các lần chạy trước
+  if (fs.existsSync(TEMP_DIR)) {
+    const staleFiles = fs.readdirSync(TEMP_DIR).filter(f => f.endsWith('.json') || f.endsWith('.log'));
+    for (const f of staleFiles) {
+      try { fs.unlinkSync(path.join(TEMP_DIR, f)); } catch (_) {}
+    }
+  }
+
   const parsedLimit = limit >= 3000 ? 3000 : limit;
  
   activeJob = {

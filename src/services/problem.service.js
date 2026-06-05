@@ -21,15 +21,12 @@ class problemsService {
   }
 
   async getProblems(page = 1, limit = 50, user = null, filters = {}) {
-    const { search, category, difficulty } = filters;
+    const { difficulty } = filters;
     const canViewHidden = can(user, PERMISSIONS.VIEW_HIDDEN_PROBLEMS);
     const userId = user?.id;
 
     const where = {
       ...(!canViewHidden && { isActive: true }),
-      ...(search && {
-        OR: [{ title: { contains: search } }, { slug: { contains: search } }],
-      }),
     };
 
     const difficultyMap = {
@@ -47,7 +44,7 @@ class problemsService {
       select: {
         id: true,
         title: true,
-        slug: true, //ĐƯA SLUG RA NGOÀI ĐỂ FIX LỖI 500 FRONTEND
+        slug: true,
         acceptanceRate: true,
         difficulty: true,
         createdAt: true,
@@ -101,6 +98,7 @@ class problemsService {
           select: {
             language: true,
             starterCode: true,
+            solutionCode: true,
           }
         },
         testCases: {
@@ -247,6 +245,147 @@ class problemsService {
     return {
       success: true,
       message: "Problem imported/updated successfully",
+    };
+  }
+
+  async updateProblem(id, data) {
+    const problem = await problemsRepository.getProblemDetail({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!problem) {
+      const error = new Error("Problem not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw error;
+    }
+
+    const {
+      codeTemplates,
+      testCases,
+      examples,
+      constraints,
+      problemTags,
+      ...fields
+    } = data;
+
+    const updateData = { ...fields };
+
+    if (codeTemplates) {
+      updateData.codeTemplates = {
+        deleteMany: {},
+        create: codeTemplates.map(ct => ({
+          language: ct.language,
+          starterCode: ct.starterCode,
+          solutionCode: ct.solutionCode,
+        })),
+      };
+    }
+
+    if (testCases) {
+      updateData.testCases = {
+        deleteMany: {},
+        create: testCases.map((tc, i) => ({
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          isHidden: tc.isHidden || false,
+          orderIndex: i,
+        })),
+      };
+    }
+
+    if (examples) {
+      updateData.examples = {
+        deleteMany: {},
+        create: examples.map((ex, i) => ({
+          input: ex.input,
+          output: ex.output,
+          explanation: ex.explanation || null,
+          orderIndex: i,
+        })),
+      };
+    }
+
+    if (constraints) {
+      updateData.constraints = {
+        deleteMany: {},
+        create: constraints.map((c, i) => ({
+          content: c.content,
+          orderIndex: i,
+        })),
+      };
+    }
+
+    if (problemTags) {
+      updateData.problemTags = {
+        deleteMany: {},
+        create: problemTags.map(pt => ({
+          tag: {
+            connectOrCreate: {
+              where: { slug: pt.tag.slug },
+              create: { name: pt.tag.name, slug: pt.tag.slug },
+            },
+          },
+        })),
+      };
+    }
+
+    const updated = await problemsRepository.updateProblem({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        difficulty: true,
+        acceptanceRate: true,
+        updatedAt: true,
+        codeTemplates: {
+          select: { language: true, starterCode: true, solutionCode: true },
+        },
+        testCases: {
+          orderBy: { orderIndex: "asc" },
+          select: { input: true, expectedOutput: true, isHidden: true },
+        },
+        examples: {
+          orderBy: { orderIndex: "asc" },
+          select: { input: true, output: true, explanation: true },
+        },
+        constraints: {
+          orderBy: { orderIndex: "asc" },
+          select: { content: true },
+        },
+        problemTags: {
+          select: {
+            tag: { select: { name: true, slug: true } },
+          },
+        },
+      },
+    });
+
+    return {
+      message: "Problem updated successfully",
+      data: updated,
+    };
+  }
+
+  async deleteProblem(id) {
+    const problem = await problemsRepository.getProblemDetail({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!problem) {
+      const error = new Error("Problem not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw error;
+    }
+
+    await problemsRepository.deleteProblem({ id });
+
+    return {
+      message: "Problem deleted successfully",
     };
   }
 }

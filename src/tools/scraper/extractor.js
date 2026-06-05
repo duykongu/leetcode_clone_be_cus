@@ -13,6 +13,10 @@ if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 const TARGET_LANGUAGES = ['cpp', 'python', 'java', 'javascript', 'typescript'];
 const githubFolderCache = new Map();
 let githubProblemListCache = null;
+const slugFolderMap = new Map();
+const slugIdMap = new Map();
+const problemMap = new Map();
+const currentMarkdownCache = new Map();
  
 function getGitHubFolderRange(problemId) {
   const id = parseInt(problemId, 10);
@@ -103,11 +107,16 @@ function githubJsonHeaders() {
  
 function cleanChineseText(text) {
   if (!text) return '';
- 
+
   return text
     .split('\n')
     .filter((line) => !/[\u4e00-\u9fa5]/.test(line))
     .join('\n');
+}
+
+function cleanSolutionComments(text) {
+  if (!text) return '';
+  return text.replace(/\/\*\*[\s\S]*?\*\//g, '').trim();
 }
  
 function parseReadmeFrontMatter(markdownText) {
@@ -142,11 +151,11 @@ function parseReadmeFrontMatter(markdownText) {
  */
 function extractMarkdownSection(markdownText, sectionName) {
   const pattern = new RegExp(
-    `([\\s\\S]*?)`,
+    `<!--\\s*${sectionName}:start\\s*-->([\\s\\S]*?)<!--\\s*${sectionName}:end\\s*-->`,
     'i',
   );
   const match = String(markdownText || '').match(pattern);
- 
+
   return match?.[1]?.trim() || '';
 }
  
@@ -210,20 +219,17 @@ async function getFreeProblemList(limit = 100, skip = 0, rangeFolder = '0000-009
     const entries = Array.isArray(response.data) ? response.data : [];
  
     const problems = [];
-    global.githubFolderMap = global.githubFolderMap || {};
-    global.problemSlugMap = global.problemSlugMap || {};
-    global.githubProblemMap = global.githubProblemMap || {};
- 
+
     for (const entry of entries) {
       if (entry.type !== 'dir') continue;
- 
+
       const parsed = parseGitHubProblemFolder(rangeFolder, entry.name);
       if (parsed) {
         problems.push(parsed);
         githubFolderCache.set(`${rangeFolder}/${getPaddedProblemId(parsed.questionId)}`, parsed.folderPath);
-        global.githubFolderMap[parsed.slug] = parsed.folderPath;
-        global.problemSlugMap[parsed.slug] = parsed.questionId;
-        global.githubProblemMap[parsed.slug] = parsed;
+        slugFolderMap.set(parsed.slug, parsed.folderPath);
+        slugIdMap.set(parsed.slug, parsed.questionId);
+        problemMap.set(parsed.slug, parsed);
       }
     }
  
@@ -268,14 +274,12 @@ async function getGitHubProblemList() {
  
   problems.sort((a, b) => Number(a.questionId) - Number(b.questionId));
   githubProblemListCache = problems;
- 
-  global.problemSlugMap = global.problemSlugMap || {};
-  global.githubProblemMap = global.githubProblemMap || {};
+
   for (const problem of problems) {
-    global.problemSlugMap[problem.slug] = problem.questionId;
-    global.githubProblemMap[problem.slug] = problem;
+    slugIdMap.set(problem.slug, problem.questionId);
+    problemMap.set(problem.slug, problem);
   }
- 
+
   return githubProblemListCache;
 }
  
@@ -326,26 +330,24 @@ async function resolveGitHubFolderPath(problemId) {
 }
  
 async function resolveProblemId(slug) {
-  const cachedId = global.problemSlugMap?.[slug];
+  const cachedId = slugIdMap.get(slug);
   if (cachedId) return cachedId;
- 
+
   const githubProblem = await resolveGitHubProblem(slug);
   if (githubProblem?.questionId) return githubProblem.questionId;
- 
+
   const detail = await getQuestionDetail(slug);
   if (!detail?.questionId) return null;
- 
-  global.problemSlugMap = global.problemSlugMap || {};
-  global.problemSlugMap[slug] = detail.questionId;
- 
+
+  slugIdMap.set(slug, detail.questionId);
+
   return detail.questionId;
 }
  
 async function resolveGitHubProblem(slug) {
-  if (global.githubProblemMap?.[slug]) {
-    return global.githubProblemMap[slug];
-  }
- 
+  const cached = problemMap.get(slug);
+  if (cached) return cached;
+
   const problems = await getGitHubProblemList();
   return problems.find((problem) => problem.slug === slug) || null;
 }
@@ -359,8 +361,7 @@ async function fetchProblemMarkdown(slug) {
   const markdownContent = await fetchMarkdownFromGitHub(folderPath);
  
   if (markdownContent) {
-    global.currentMarkdownCache = global.currentMarkdownCache || {};
-    global.currentMarkdownCache[slug] = markdownContent;
+    currentMarkdownCache.set(slug, markdownContent);
   }
  
   return markdownContent;
@@ -369,22 +370,20 @@ async function fetchProblemMarkdown(slug) {
 async function fetchAndSaveRawData(slug) {
   try {
     const githubProblem = await resolveGitHubProblem(slug);
-    const questionDetail = null;
-    const targetId = githubProblem?.questionId || global.problemSlugMap?.[slug];
+    const questionDetail = await getQuestionDetail(slug).catch(() => null);
+    const targetId = githubProblem?.questionId || slugIdMap.get(slug);
     const folderPath = githubProblem?.folderPath || await resolveGitHubFolderPath(targetId);
  
     if (!folderPath) return false;
- 
-    global.problemSlugMap = global.problemSlugMap || {};
-    global.problemSlugMap[slug] = targetId;
- 
+
+    slugIdMap.set(slug, targetId);
+
     const markdownContent = await fetchMarkdownFromGitHub(folderPath);
     if (!markdownContent || markdownContent.trim() === '') {
       throw new Error('GitHub markdown is empty or unavailable');
     }
- 
-    global.currentMarkdownCache = global.currentMarkdownCache || {};
-    global.currentMarkdownCache[slug] = markdownContent;
+
+    currentMarkdownCache.set(slug, markdownContent);
  
     const snippetMap = new Map();
     for (const snip of questionDetail?.codeSnippets || []) {
@@ -426,7 +425,7 @@ async function fetchTargetSolutionCode(slug, targetLang) {
   const lang = normalizeLanguage(targetLang);
   if (!lang) return null;
  
-  let markdownText = global.currentMarkdownCache?.[slug];
+  let markdownText = currentMarkdownCache.get(slug);
  
   if (!markdownText) {
     markdownText = await fetchProblemMarkdown(slug);
@@ -443,15 +442,14 @@ async function fetchTargetSolutionCode(slug, targetLang) {
   };
  
   for (const tag of langTagsMap[lang]) {
-  const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  
-  const regex = new RegExp(`\`\`\`${escapedTag}(?:[^\\r\\n]*)[\\r\\n]+([\\s\\S]*?)\\s*\`\`\``, 'i');
-  const match = markdownText.match(regex);
+    const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\`\`\`${escapedTag}(?:[^\\r\\n]*)[\\r\\n]+([\\s\\S]*?)\\s*\`\`\``, 'i');
+    const match = markdownText.match(regex);
 
-  if (match?.[1]) {
-    return cleanChineseText(match[1].trim());
+    if (match?.[1]) {
+      return cleanSolutionComments(cleanChineseText(match[1].trim()));
+    }
   }
-}
 
 return null;
 }
@@ -462,4 +460,7 @@ module.exports = {
   fetchTargetSolutionCode,
   getQuestionDetail,
   fetchProblemMarkdown,
+  normalizeLanguage,
+  buildFallbackStarterCode,
+  TARGET_LANGUAGES,
 };

@@ -4,11 +4,9 @@
 
 const express = require('express');
 const router = express.Router();
-const ScraperController = require('../controllers/scraper.controller');
+const { scraperController } = require('../container');
 const authMiddleware = require('../middleware/auth.middleware');
 const { PERMISSIONS } = require('../constants/permissions');
-
-const scraperController = new ScraperController();
 
 // Tất cả routes đều yêu cầu MANAGE_PROBLEMS (Admin only)
 router.use(authMiddleware.authenticate);

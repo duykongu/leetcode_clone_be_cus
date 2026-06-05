@@ -5,38 +5,11 @@
 const fs = require('fs');
 const path = require('path');
 const cheerio = require('cheerio');
-const { PrismaClient } = require('@prisma/client');
- 
-// Dùng để lấy bù metadata + codeSnippets từ LeetCode nếu extractor không fetch được
-const { getQuestionDetail } = require('./extractor');
- 
-const prisma = new PrismaClient();
+
+const prisma = require('../../config/database');
+const { getQuestionDetail, normalizeLanguage, buildFallbackStarterCode, TARGET_LANGUAGES } = require('./extractor');
+
 const tempDir = path.resolve(__dirname, '../../temp/scraper_data');
-const TARGET_LANGUAGES = ['cpp', 'python', 'java', 'javascript', 'typescript'];
- 
-function normalizeLanguage(lang) {
-  const value = String(lang || '').toLowerCase();
- 
-  if (value === 'c++' || value === 'cpp') return 'cpp';
-  if (value === 'python' || value === 'python3') return 'python';
-  if (value === 'javascript' || value === 'js') return 'javascript';
-  if (value === 'typescript' || value === 'ts') return 'typescript';
-  if (value === 'java') return 'java';
- 
-  return '';
-}
- 
-function buildFallbackStarterCode(language) {
-  const fallback = {
-    cpp: 'class Solution {\npublic:\n    // Write your solution here\n};',
-    python: 'class Solution:\n    # Write your solution here\n    pass',
-    java: 'class Solution {\n    // Write your solution here\n}',
-    javascript: '/**\n * Write your solution here\n */',
-    typescript: '/**\n * Write your solution here\n */',
-  };
- 
-  return fallback[language] || '// Starter code unavailable';
-}
  
 function normalizeSpace(value) {
   return String(value || '')
@@ -54,10 +27,13 @@ function parseExampleText(text) {
   const explanationMatch = normalized.match(/Explanation:\s*([\s\S]*)$/i);
  
   if (!inputMatch || !outputMatch) return null;
- 
+
+  let output = normalizeSpace(outputMatch[1]);
+  output = output.replace(/^\s*([^,]+?)\s*,\s*\w+\s*=\s*\[.*?\]\s*$/, '$1').trim();
+
   return {
     input: normalizeSpace(inputMatch[1]),
-    output: normalizeSpace(outputMatch[1]),
+    output,
     explanation: explanationMatch ? normalizeSpace(explanationMatch[1]) : null,
   };
 }
@@ -200,12 +176,11 @@ function modifyProblemId(originalId) {
 async function processJsonFile(slug) {
   const jsonPath = path.join(tempDir, `${slug}.json`);
   const errorLogPath = path.join(tempDir, `${slug}.error.log`);
-  const jsonData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
   if (!fs.existsSync(jsonPath)) {
     console.log(`   [Transformer] Skip: missing ${slug}.json`);
     return false;
   }
- 
+
   try {
     const rawContent = fs.readFileSync(jsonPath, 'utf-8');
     const detail = JSON.parse(rawContent);
@@ -266,10 +241,10 @@ async function processJsonFile(slug) {
     if (!rawQuestionId) {
       throw new Error(`Missing LeetCode questionId for ${slug}`);
     }
- 
+
     // 🔥 Biến đổi ID từ "0001" thành "1" dưới dạng chuỗi (Khớp CHAR(36) trong DB)
     const problemId = modifyProblemId(rawQuestionId);
- 
+
     // Chuẩn bị dữ liệu Code Template kèm cả SOLUTION CODE bóc được từ MD
     for (const snip of detail.codeSnippets || []) {
       const language = normalizeLanguage(snip.langSlug || snip.lang);
@@ -304,21 +279,21 @@ async function processJsonFile(slug) {
         where: { slug },
         select: { id: true },
       });
- 
+
       const existingById = await tx.problem.findUnique({
         where: { id: problemId },
         select: { id: true },
       });
- 
+
       const idsToDelete = Array.from(new Set([
         existingBySlug?.id,
         existingById?.id,
       ].filter(Boolean)));
- 
+
       for (const id of idsToDelete) {
         await deleteProblemGraph(tx, id);
       }
- 
+
       // Lưu trữ đồng bộ đề bài, ràng buộc, tags và lời giải vào DB
       await tx.problem.create({
         data: {
@@ -346,7 +321,7 @@ async function processJsonFile(slug) {
         },
       });
     });
- 
+
     // Xóa file tạm JSON nếu nạp DB thành công hoàn toàn
     fs.unlinkSync(jsonPath);
     if (fs.existsSync(errorLogPath)) fs.unlinkSync(errorLogPath);

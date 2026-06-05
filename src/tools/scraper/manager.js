@@ -1,8 +1,8 @@
-const { PrismaClient, Prisma } = require('@prisma/client');
+const { Prisma } = require('@prisma/client');
 const { getFreeProblemList, fetchAndSaveRawData, getQuestionDetail } = require('./extractor');
 const { processJsonFile, isProblemExists } = require('./transformer');
- 
-const prisma = new PrismaClient();
+
+const prisma = require('../../config/database');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  
 const TARGET_RANGES = [
@@ -136,4 +136,6 @@ async function run() {
   }
 }
  
-run().catch(console.error);
+if (require.main === module) {
+  run().catch(console.error);
+}
