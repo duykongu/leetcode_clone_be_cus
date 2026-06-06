@@ -6,6 +6,8 @@ require('dotenv').config();
   const userRoutes        = require('./src/routes/user.routes');
   const executionRoutes   = require('./src/routes/execution.routes');
   const scraperRoutes     = require('./src/routes/scraper.routes');   // <-- THÊM
+  const discussionRoutes  = require('./src/routes/discussion.routes');
+  const announcementRoutes = require('./src/routes/announcement.routes');
   const app = express();
  
   app.use(cors());
@@ -23,6 +25,8 @@ require('dotenv').config();
   app.use('/api', authRoutes);
   app.use('/api', userRoutes);
   app.use('/api/problems', problemsRoutes);
+  app.use('/api/discussions', discussionRoutes);
+  app.use('/api/announcements', announcementRoutes);
 
 // 404 Handler
 app.use((req, res) => {
