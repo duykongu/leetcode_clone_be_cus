@@ -96,10 +96,16 @@ addComment = async (req, res) => {
     }
   }
   deleteComment = async (req, res) => {
-    try { // Chú ý: Truyền thêm req.params.id (ID bài viết)
+    try { 
+      // Kiểm tra xem 2 cái này có undefined không?
+      console.log("Discussion ID:", req.params.id); 
+      console.log("Comment ID:", req.params.commentId);
+      
       const result = await this.discussionService.deleteComment(req.user, req.params.id, req.params.commentId);
       res.json(result);
-    } catch (err) { res.status(err.statusCode || 500).json({ success: false, message: err.message }); }
+    } catch (err) { 
+      res.status(err.statusCode || 500).json({ success: false, message: err.message });
+    }
   }
 
   updateComment = async (req, res) => {

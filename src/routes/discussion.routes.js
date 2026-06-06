@@ -14,7 +14,7 @@ router.put('/:id', authMiddleware.authenticate, discussionController.updateDiscu
 
 // Các thao tác Tương tác & Kiểm duyệt
 router.post('/:id/interact', authMiddleware.authenticate, discussionController.interact);
-router.delete('/:id', authMiddleware.authenticate, discussionController.deleteDiscussion);
+router.delete('/:id/comments/:commentId', authMiddleware.authenticate, discussionController.deleteComment);
 router.put('/:id/pin', authMiddleware.authenticate, discussionController.togglePin);
 
 router.put('/:id/comments/:commentId', authMiddleware.authenticate, discussionController.updateComment);

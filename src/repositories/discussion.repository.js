@@ -174,9 +174,30 @@ class DiscussionRepository extends BaseRepository {
     });
   }
 
-  // Xóa bình luận
+   // --- HÀM XÓA BÌNH LUẬN ---
   async deleteComment(commentId) {
-    return this.prisma.comment.delete({ where: { id: commentId } });
+    // Dùng Transaction để xóa từ dưới lên trên, đảm bảo không bị lỗi Khóa Ngoại
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Tìm tất cả comment con
+      const children = await tx.comment.findMany({ 
+        where: { parentId: commentId }, 
+        select: { id: true } 
+      });
+      const allIds = [commentId, ...children.map(c => c.id)];
+      
+      // 2. Xóa sạch tương tác (Like/Dislike) của cả cha lẫn con
+      await tx.userCommentInteraction.deleteMany({ 
+        where: { commentId: { in: allIds } } 
+      });
+      
+      // 3. Xóa comment con trước
+      if (children.length > 0) {
+        await tx.comment.deleteMany({ where: { parentId: commentId } });
+      }
+      
+      // 4. Xóa comment cha
+      return tx.comment.delete({ where: { id: commentId } });
+    });
   }
   //sửa comment
   async updateComment(commentId, content) {

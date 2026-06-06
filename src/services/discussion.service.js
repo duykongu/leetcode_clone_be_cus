@@ -32,10 +32,14 @@ class DiscussionService {
 
     return { success: true, message: "Đăng bài thành công!", data: newDiscuss };
   }
-
+// --- HÀM GỬI BÌNH LUẬN
   async addComment(user, discussionId, content, parentId = null) {
     if (!content || !content.trim()) throw { statusCode: 400, message: "Nội dung bình luận không được rỗng" };
-    const discuss = await discussionRepository.getDiscussionDetail(discussionId);
+    
+    // Chỉ kiểm tra nhẹ xem bài viết có tồn tại không, KHÔNG gọi hàm getDetail nặng nề
+    const discuss = await discussionRepository.prisma.discussion.findUnique({
+      where: { id: discussionId }, select: { id: true }
+    });
     if (!discuss) throw { statusCode: 404, message: "Bài viết không tồn tại" };
 
     const comment = await discussionRepository.addComment(discussionId, user.id, content, parentId);
@@ -94,17 +98,22 @@ async interact(userId, discussionId, action) {
     const updated = await discussionRepository.updateDiscussion(discussionId, updateData);
     return { success: true, message: "Cập nhật thành công", data: updated };
   }
-  //HÀM XÓA 
-  async deleteComment(user, discussionId, commentId) {
-    const discuss = await discussionRepository.getDiscussionDetail(discussionId);
+ // --- HÀM XÓA BÌNH LUẬN ---
+async deleteComment(user, discussionId, commentId) {
     const comment = await discussionRepository.getCommentById(commentId);
-    if (!comment || !discuss) throw { statusCode: 404, message: "Dữ liệu không tồn tại" };
+    if (!comment) throw { statusCode: 404, message: "Bình luận không tồn tại" };
 
-    // BẢO MẬT 3 LỚP: Chủ comment OR Chủ bài viết OR Admin
+    const discuss = await discussionRepository.prisma.discussion.findUnique({
+      where: { id: discussionId }, select: { userId: true }
+    });
+    if (!discuss) throw { statusCode: 404, message: "Bài viết không tồn tại" };
+
+    // BẢO MẬT: Chỉ chủ bình luận, chủ bài viết, hoặc admin mới được xóa
     if (comment.userId !== user.id && discuss.userId !== user.id && user.role !== 'admin') {
       throw { statusCode: 403, message: "Bạn không có quyền xóa bình luận này!" };
     }
 
+    // Gọi xuống Repo để dọn dẹp
     await discussionRepository.deleteComment(commentId);
     return { success: true, message: "Đã xóa bình luận" };
   }

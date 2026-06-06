@@ -192,7 +192,7 @@ _run_wrapper();`;
     }
   },
 
-  "typescript": {
+"typescript": {
     image: "node:18-alpine",
     fileName: "solution.ts",
     compileCmd: (dir) => `docker run --rm -v "${dir}:/app" -w /app ts-leetcode tsc solution.ts --target es2020 --module commonjs`,
@@ -200,6 +200,10 @@ _run_wrapper();`;
     wrapper: (userCode, metadata) => {
       const methodName = metadata.name || "main";
       const returnType = metadata.return?.type || "void";
+      
+      // LOGIC MỚI XỬ LÝ TRÁNH LỖI TS2367: 
+      // Kiểm tra ngay tại Node.js, chỉ in code ra file ts nếu thực sự là hàm void
+      const inPlaceLogic = returnType === 'void' ? 'result = parsedArgs[0];' : '';
 
       return `
 declare var require: any;
@@ -221,10 +225,8 @@ function _run_wrapper() {
         const fn: any = ${methodName};
         let result: any = fn(...parsedArgs);
         
-        // Xử lý In-place
-        if ('${returnType}' === 'void') {
-            result = parsedArgs[0];
-        }
+        // Xử lý In-place an toàn
+        ${inPlaceLogic}
 
         if (Array.isArray(result)) {
             console.log(JSON.stringify(result).replace(/\\s/g, ''));
