@@ -58,6 +58,10 @@ class AuthService {
         createdAt: true,
         role: true,
         passwordHash: true,
+
+        solvedCount: true, 
+        streakDays: true, 
+        avatarUrl: true,  
       },
     });
     if (!user) {

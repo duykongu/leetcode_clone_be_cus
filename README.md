@@ -199,63 +199,45 @@ ISC
 
 
 
-# Hướng dẫn Setup Môi trường Docker bằng 1 lệnh duy nhất
 
-## 1. Tải tất cả các Docker Images
 
-Chạy lệnh gộp dưới đây tùy thuộc vào Shell bạn đang mở:
 
-### Cho PowerShell:
+# 🛠️ Hướng dẫn Setup Môi trường & Chạy dự án (Dành cho Team)
+
+Để hệ thống chấm code và cào dữ liệu hoạt động chính xác 100%, các thành viên (Clone code mới về máy) vui lòng thực hiện đúng theo các bước sau:
+
+## Bước 1: Tải các Docker Images gốc (Base Images)
+Mở Terminal / PowerShell và chạy lệnh gộp sau để tải các môi trường biên dịch lõi:
 ```powershell
 docker pull gcc:latest; docker pull eclipse-temurin:17-jdk-alpine; docker pull python:3.9-slim; docker pull node:18-alpine
-```
 
-### Cho CMD (Command Prompt):
-```cmd
-docker pull gcc:latest && docker pull eclipse-temurin:17-jdk-alpine && docker pull python:3.9-slim && docker pull node:18-alpine
-```
-
-## 2. Cài đặt thêm thư viện ở Frontend
-Di chuyển vào thư mục `leetcode_fe` và chạy:
-```bash
-npm install axios
-```
+## Bước 2: thư viện cho docker
+C++: docker build -t gcc-leetcode -f Dockerfile.cpp .
+Java: docker build -t java-leetcode -f Dockerfile.java .
+TypeScript: docker build -t ts-leetcode -f Dockerfile.ts .
 
 
-===============
-**HƯỚNG DẪN CẬP NHẬT DỮ LIỆU BÀI TẬP (CƠ CHẾ DYNAMIC METADATA)**
+## Bước 3: Cào dữ liệu
+node manager.js
 
-- **Nếu database rỗng hoặc muốn lấy bài mới:** Chỉ cần chạy lệnh `node "Script Tool.js"`.
-- **Nếu đã có sẵn data nhưng bị thiếu cấu trúc chấm code (metadata):** Cũng chỉ cần chạy lại lệnh `node "Script Tool.js"`. Hệ thống sẽ tự động quét, ghi đè (upsert) và bổ sung chuẩn xác `metadata` từ LeetCode vào các bài tập cũ mà không làm mất code mẫu.
-
-===============
-
-cài thư viện cho typescript 
-mở terminal chạy trong dự án
--> npm install -g typescript
-sau đó chạy tiếp -> tsc -v
-================
-3.Custom Docker Images (C++ và Java)
-Đây là bước quan trọng nhất. Máy mới cần phải có 2 file Dockerfile và thực thi lệnh đúc Image để nhúng thư viện JSON vào trong.
-
-A.C++ (gcc-leetcode)
-
-mở file đã tạo tên là Dockerfile.cpp tại thư mục gốc Backend
-
--> docker build -t gcc-leetcode -f Dockerfile.cpp .
-
-
-B.Java (java-leetcode)
-
-file tên là Dockerfile.java tại thư mục gốc Backend
-
- -> docker build -t java-leetcode -f Dockerfile.java .
-
-
- cài typescript:
- docker build -t ts-leetcode -f Dockerfile.ts .
 
 4. Kiểm tra thành quả
 Sau khi người mới chạy xong các lệnh trên, bảo họ gõ lệnh này để kiểm tra xem "đồ nghề" đã đủ chưa:
 
 -> docker images
+===================================
+
+🚀 CHANGELOG TÍNH NĂNG MỚI
+
+Nâng cấp Lõi Chấm Code (Execution Engine)
+Timezone-safe Streak: Thuật toán tính Chuỗi ngày nay dùng múi giờ VN (YYYY-MM-DD). Chỉ kích hoạt khi user thực sự bấm Nộp bài (Chặn lưu DB khi chỉ bấm "Chạy Code").
+
+Smart Cleanup: Tối ưu Database bằng cách giới hạn 20 lần nộp/bài tập. Tự động tìm và xóa vĩnh viễn các file Code bị lỗi cũ nhất.
+
+In-place Modification: Hệ thống đã tự động nhận diện các hàm void (như bài Sudoku, Rotate Array) để in ra giá trị của mảng args[0] bị sửa đổi thay vì in ra null.
+
+Bọc thép JSON Lexer: Cập nhật file formatter.util.js thành một State Machine đếm ngoặc (Balanced Parentheses), chấp mọi loại mảng 2D, 3D hay chuỗi chứa ký tự xuống dòng mà không gây lỗi parse JSON.
+
+COMMON_STRUCTURES & TYPE_MAP: Tự động "tiêm" ListNode, TreeNode vào code user. Tự động dịch kiểu dữ liệu integer[], character[][], double,... sang chuẩn của C++ và Java.
+
+Chống Bom Biên Dịch: Set timeout 60 giây cho trình g++ để chống treo Server khi gặp code tà đạo.

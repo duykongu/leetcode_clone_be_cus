@@ -5,15 +5,38 @@ class DiscussionRepository extends BaseRepository {
     super("discussion");
   }
 
-  // Lấy danh sách bài viết (Ưu tiên bài Ghim -> Sắp xếp theo Upvote/Mới nhất)
-  async getDiscussionsList(page, limit, filters = {}) {
+// Lấy danh sách bài viết
+  async getDiscussionsList(page, limit, filters = {}, userId = null) {
     const skip = (page - 1) * limit;
     
-    // Nếu có problemId thì lọc, không thì thôi (Thảo luận chung)
-    const where = {};
+    // 1. MẶC ĐỊNH LÀ ẨN CÁC BÀI ĐÃ XÓA (isDeleted: false)
+    const where = { isDeleted: false };
+
     if (filters.problemId) where.problemId = filters.problemId;
-    if (filters.search) {
-      where.title = { contains: filters.search };
+    if (filters.search) where.title = { contains: filters.search };
+
+    // 2. NẾU ĐANG Ở TAB "ĐÃ LƯU" VÀ CÓ LOGIN
+    if (filters.isSaved && userId) {
+      where.interactions = {
+        some: { userId: userId, isSaved: true }
+      };
+    }
+
+    // 3. XỬ LÝ SẮP XẾP VÀ GHIM
+    const orderBy = [];
+    
+    // Nếu không tắt tính năng Ưu tiên Ghim thì đẩy bài Ghim lên đầu
+    if (filters.pinPriority !== 'false') {
+      orderBy.push({ isPinned: 'desc' });
+    }
+
+    // Sắp xếp theo Hot hoặc Mới nhất
+    if (filters.sortBy === 'hot') {
+      orderBy.push({ upvotes: 'desc' });
+      orderBy.push({ views: 'desc' });
+    } else {
+      // Mặc định là 'new'
+      orderBy.push({ createdAt: 'desc' }); 
     }
 
     const [data, total] = await Promise.all([
@@ -21,41 +44,41 @@ class DiscussionRepository extends BaseRepository {
         skip,
         take: limit,
         where,
-        orderBy: [
-          { isPinned: 'desc' }, // Bài ghim luôn lên đầu
-          { createdAt: 'desc' } // Sau đó mới đến bài mới nhất
-        ],
+        orderBy,
         include: {
           user: { select: { username: true, avatarUrl: true, role: true } },
           problem: { select: { title: true, slug: true } },
-          _count: { select: { comments: true } } // Đếm số lượng bình luận
+          _count: { select: { comments: true } }
         }
       }),
       this.prisma.discussion.count({ where })
     ]);
-
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  // Lấy chi tiết 1 bài viết kèm toàn bộ bình luận
-  async getDiscussionDetail(id) {
-    // Tăng view mỗi khi có người bấm vào xem
+// Lấy chi tiết 1 bài viết kèm bình luận và trạng thái tương tác
+  async getDiscussionDetail(id, userId = null) {
     await this.prisma.discussion.update({
       where: { id },
       data: { views: { increment: 1 } }
-    }).catch(() => {}); // Bỏ qua lỗi nếu bài không tồn tại
+    }).catch(() => {});
 
     return this.prisma.discussion.findUnique({
-      where: { id },
+      // Chỉ lấy bài chưa bị xóa mềm
+      where: { id, isDeleted: false },
       include: {
-        user: { select: { username: true, avatarUrl: true, role: true } },
+        user: { select: { username: true, avatarUrl: true, role: true, id: true } },
         problem: { select: { title: true, slug: true } },
         comments: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            user: { select: { username: true, avatarUrl: true, role: true } }
+          orderBy: [{ isPinned: 'desc' }, { createdAt: 'asc' }],
+          include: { 
+            user: { select: { username: true, avatarUrl: true, role: true } },
+            // Dùng Spread Operator để nhúng an toàn, tránh lỗi chữ "false" của Prisma
+            ...(userId && { interactions: { where: { userId: userId } } }) 
           }
-        }
+        },
+        // Tương tự cho phần interactions của bài viết gốc
+        ...(userId && { interactions: { where: { userId: userId } } })
       }
     });
   }
@@ -68,6 +91,129 @@ class DiscussionRepository extends BaseRepository {
         user: { select: { username: true, avatarUrl: true, role: true } }
       }
     });
+  }
+// Xử lý Tương tác (Like / Dislike / Lưu)
+  async toggleInteraction(userId, discussionId, action) {
+    const existing = await this.prisma.userDiscussionInteraction.findUnique({
+      where: { userId_discussionId: { userId, discussionId } }
+    });
+
+    // Nếu là LƯU BÀI (Bookmark)
+    if (action === 'save') {
+      const newValue = existing ? !existing.isSaved : true;
+      return this.prisma.userDiscussionInteraction.upsert({
+        where: { userId_discussionId: { userId, discussionId } },
+        update: { isSaved: newValue },
+        create: { userId, discussionId, isSaved: true }
+      });
+    }
+
+    // Nếu là LIKE (upvote) hoặc DISLIKE (downvote)
+    if (action === 'upvote' || action === 'downvote') {
+      const currentVote = existing ? existing.voteType : 0;
+      let newVote = 0;
+
+      if (action === 'upvote') {
+        newVote = currentVote === 1 ? 0 : 1; // Nếu đang Like thì gỡ Like (về 0), nếu không thì thành Like (1)
+      } else if (action === 'downvote') {
+        newVote = currentVote === -1 ? 0 : -1; // Nếu đang Dislike thì gỡ (về 0), nếu không thì thành Dislike (-1)
+      }
+
+      // Công thức tính số điểm chênh lệch để cộng/trừ vào tổng
+      const voteDiff = newVote - currentVote;
+
+      return this.prisma.$transaction([
+        this.prisma.userDiscussionInteraction.upsert({
+          where: { userId_discussionId: { userId, discussionId } },
+          update: { voteType: newVote },
+          create: { userId, discussionId, voteType: newVote }
+        }),
+        // Cập nhật con số upvotes hiển thị ra ngoài
+        this.prisma.discussion.update({
+          where: { id: discussionId },
+          data: { upvotes: { increment: voteDiff } }
+        })
+      ]);
+    }
+  }
+
+  // 2. Xóa mềm (Bia mộ)
+  async softDelete(id) {
+    return this.prisma.discussion.update({
+      where: { id },
+      data: { isDeleted: true }
+    });
+  }
+
+  // 3. Admin Ghim bài
+  async togglePin(id, currentPinStatus) {
+    return this.prisma.discussion.update({
+      where: { id },
+      data: { isPinned: !currentPinStatus }
+    });
+  }
+
+  // Sửa bài viết
+  async updateDiscussion(id, data) {
+    return this.prisma.discussion.update({
+      where: { id },
+      data
+    });
+  }
+
+  // Lấy 1 comment để kiểm tra quyền xóa
+  async getCommentById(commentId) {
+    return this.prisma.comment.findUnique({ where: { id: commentId } });
+  }
+
+  // Thêm bình luận mới
+  async addComment(discussionId, userId, content, parentId = null) {
+    return this.prisma.comment.create({
+      data: { discussionId, userId, content, parentId },
+      include: { user: { select: { username: true, avatarUrl: true, role: true } } }
+    });
+  }
+
+  // Xóa bình luận
+  async deleteComment(commentId) {
+    return this.prisma.comment.delete({ where: { id: commentId } });
+  }
+  //sửa comment
+  async updateComment(commentId, content) {
+    return this.prisma.comment.update({ where: { id: commentId }, data: { content } });
+  }
+  //ghim
+  async togglePinComment(commentId, isPinned) {
+    return this.prisma.comment.update({ where: { id: commentId }, data: { isPinned: !isPinned } });
+  }
+
+  // Bật/Tắt Vote cho Comment
+  async toggleCommentInteraction(userId, commentId, action) {
+    const existing = await this.prisma.userCommentInteraction.findUnique({
+      where: { userId_commentId: { userId, commentId } }
+    });
+
+    if (action === 'upvote' || action === 'downvote') {
+      const currentVote = existing ? existing.voteType : 0;
+      let newVote = 0;
+
+      if (action === 'upvote') newVote = currentVote === 1 ? 0 : 1;
+      else if (action === 'downvote') newVote = currentVote === -1 ? 0 : -1;
+
+      const voteDiff = newVote - currentVote;
+
+      return this.prisma.$transaction([
+        this.prisma.userCommentInteraction.upsert({
+          where: { userId_commentId: { userId, commentId } },
+          update: { voteType: newVote },
+          create: { userId, commentId, voteType: newVote }
+        }),
+        this.prisma.comment.update({
+          where: { id: commentId },
+          data: { upvotes: { increment: voteDiff } }
+        })
+      ]);
+    }
   }
 }
 
