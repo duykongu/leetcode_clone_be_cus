@@ -1,3 +1,4 @@
+const prisma = require("../config/database");
 const { problemsRepository, userRepository } = require("../repositories");
 const { HTTP_STATUS, PROBLEM_DIFFICULTY } = require("../constants");
 const { structureDescription } = require("../utils/html-cleaner");
@@ -21,59 +22,106 @@ class problemsService {
   }
 
   async getProblems(page = 1, limit = 50, user = null, filters = {}) {
-    const { difficulty } = filters;
+    const { category, difficulty, sortBy = 'id', sortOrder = 'asc' } = filters;
     const canViewHidden = can(user, PERMISSIONS.VIEW_HIDDEN_PROBLEMS);
     const userId = user?.id;
 
     const where = {
       ...(!canViewHidden && { isActive: true }),
+      ...(category && { category }),
     };
 
-    const difficultyMap = {
-      Easy: PROBLEM_DIFFICULTY.EASY,
-      Medium: PROBLEM_DIFFICULTY.MEDIUM,
-      Hard: PROBLEM_DIFFICULTY.HARD,
-    };
-
-    if (difficulty && difficultyMap[difficulty] !== undefined) {
-      where.difficulty = difficultyMap[difficulty];
+    if (difficulty !== undefined && [0, 1, 2].includes(difficulty)) {
+      where.difficulty = difficulty;
     }
 
-    const result = await problemsRepository.getProblems({
-      where,
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        acceptanceRate: true,
-        difficulty: true,
-        createdAt: true,
-        ...(canViewHidden && { isActive: true }),
-        ...(userId && {
-          userProblems: {
-            where: { userId },
-            select: { isSolved: true },
-          },
-        }),
-      },
-      page,
-      limit,
-    });
+    const SORT_WHITELIST = ['id', 'title', 'difficulty', 'acceptanceRate', 'totalAccepted', 'totalSubmitted', 'createdAt', 'updatedAt'];
+    const field = SORT_WHITELIST.includes(sortBy) ? sortBy : 'id';
+    const dir = sortOrder === 'desc' ? 'desc' : 'asc';
+    const skip = (page - 1) * limit;
 
-    const data = result.data.map((p) => {
-      const isSolved =
-        p.userProblems && p.userProblems.length > 0
-          ? p.userProblems[0].isSolved
-          : false;
-      const { userProblems, ...problemData } = p;
-      return { ...problemData, isSolved };
-    });
+    let problems;
+    let total;
+
+    if (field === 'id') {
+      const conditions = [];
+      const params = [];
+
+      if (!canViewHidden) {
+        conditions.push('p.is_active = ?');
+        params.push(true);
+      }
+      if (category) {
+        conditions.push('p.category = ?');
+        params.push(category);
+      }
+      if (difficulty !== undefined && [0, 1, 2].includes(difficulty)) {
+        conditions.push('p.difficulty = ?');
+        params.push(difficulty);
+      }
+
+      const whereSQL = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+      const orderSQL = dir === 'desc' ? 'ORDER BY CAST(p.id AS UNSIGNED) DESC' : 'ORDER BY CAST(p.id AS UNSIGNED) ASC';
+
+      const countResult = await prisma.$queryRawUnsafe(
+        `SELECT COUNT(*) as total FROM problems p ${whereSQL}`,
+        ...params
+      );
+      total = Number(countResult[0].total);
+
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT p.id, p.title, p.slug, p.difficulty, p.category,
+                p.is_active AS isActive, p.acceptance_rate AS acceptanceRate,
+                p.total_accepted AS totalAccepted, p.total_submitted AS totalSubmitted,
+                p.created_at AS createdAt
+         FROM problems p ${whereSQL} ${orderSQL} LIMIT ? OFFSET ?`,
+        ...params, limit, skip
+      );
+
+      problems = rows.map(p => ({
+        id: String(p.id),
+        title: p.title,
+        slug: p.slug,
+        difficulty: Number(p.difficulty),
+        category: p.category,
+        acceptanceRate: Number(p.acceptanceRate),
+        createdAt: p.createdAt,
+      }));
+    } else {
+      const result = await problemsRepository.getProblems({
+        where,
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          acceptanceRate: true,
+          difficulty: true,
+          createdAt: true,
+          ...(canViewHidden && { isActive: true }),
+        },
+        page,
+        limit,
+        orderBy: { [field]: dir },
+      });
+      problems = result.data;
+      total = result.total;
+    }
+
+    const data = problems.map(p => ({ ...p, isSolved: false }));
 
     let userStats = { solvedCount: 0, streakDays: 0 };
     if (userId) {
-      const user = await userRepository.findById(userId, {
-        select: { solvedCount: true, streakDays: true },
-      });
+      const [solvedRecords, user] = await Promise.all([
+        prisma.userProblemStatus.findMany({
+          where: { userId, isSolved: true },
+          select: { problemId: true },
+        }),
+        userRepository.findById(userId, {
+          select: { solvedCount: true, streakDays: true },
+        }),
+      ]);
+      const solvedSet = new Set(solvedRecords.map(r => r.problemId));
+      data.forEach(p => { p.isSolved = solvedSet.has(String(p.id)); });
       if (user) userStats = user;
     }
 
@@ -81,7 +129,12 @@ class problemsService {
       success: true,
       message: "Problems retrieved successfully",
       data,
-      pagination: result.pagination,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
       userStats,
     };
   }

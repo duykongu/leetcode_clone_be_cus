@@ -22,9 +22,16 @@ class ProblemsController {
     try {
       const { page, limit } = getPagination(req.query);
       const user = req.user;
+
+      const SORT_FIELDS = ['id', 'difficulty', 'acceptanceRate', 'title', 'totalAccepted', 'totalSubmitted', 'createdAt', 'updatedAt'];
+      const sortBy = SORT_FIELDS.includes(req.query.sortBy) ? req.query.sortBy : 'id';
+      const sortOrder = req.query.sortOrder === 'desc' ? 'desc' : 'asc';
+
       const filters = {
         category: req.query.category,
-        difficulty: req.query.difficulty,
+        difficulty: req.query.difficulty !== undefined ? Number(req.query.difficulty) : undefined,
+        sortBy,
+        sortOrder,
       };
 
       const result = await this.problemService.getProblems(page, limit, user, filters);

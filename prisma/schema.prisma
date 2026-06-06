@@ -102,6 +102,7 @@ model Problem {
   slug            String   @unique @db.VarChar(255)
   description     String   @db.LongText
   difficulty      Int      @default(0) @map("difficulty")
+  category        String   @default("algorithms") @db.VarChar(32)
   isActive        Boolean  @default(true) @map("is_active")
   acceptanceRate  Decimal  @default(0.00) @map("acceptance_rate") @db.Decimal(5,2)
   totalAccepted   Int      @default(0) @map("total_accepted")

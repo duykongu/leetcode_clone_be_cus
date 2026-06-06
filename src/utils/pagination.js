@@ -1,4 +1,4 @@
-function getPagination(query, defaultLimit = 10) {
+function getPagination(query, defaultLimit = 50) {
   const page = Math.max(parseInt(query.page) || 1, 1);
   const limit = Math.max(parseInt(query.limit) || defaultLimit, 1);
   return { page, limit };
@@ -16,6 +16,7 @@ function buildPagination(page, limit, total) {
 function buildPaginatedResponse(data, page, limit, total) {
   return {
     data,
+    total,
     pagination: buildPagination(page, limit, total),
   };
 }
