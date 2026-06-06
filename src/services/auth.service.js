@@ -70,7 +70,7 @@ class AuthService {
     }
 
     const token = this.tokenService.generateToken(user);
-    await userRepo.updateLastActive(user.id);
+    // await userRepo.updateLastActive(user.id);
 
     return { message: "Login successful", data: { user, token } };
   }

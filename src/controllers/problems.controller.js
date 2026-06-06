@@ -20,7 +20,7 @@ class ProblemsController {
 
   getProblems = async (req, res) => {
     try {
-      const { page, limit } = getPagination(req.query, 50);
+      const { page, limit } = getPagination(req.query);
       const user = req.user;
       const filters = {
         category: req.query.category,
