@@ -8,8 +8,23 @@
 const EventEmitter = require('events');
 const { getFreeProblemList, fetchAndSaveRawData } = require('../tools/scraper/extractor');
 const { processJsonFile, disconnectDB, isProblemExists } = require('../tools/scraper/transformer');
+const { generateSolution } = require('./ai.service');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Interruptible sleep — kiểm tra stopRequested mỗi 200ms
+const cancellableSleep = async (ms, job) => {
+  const step = 200;
+  let remaining = ms;
+  while (remaining > 0) {
+    if (job?.stopRequested) return;
+    await new Promise(r => setTimeout(r, Math.min(step, remaining)));
+    remaining -= step;
+  }
+};
+
+const AI_CONCURRENCY = 5;
+const SCRAPE_CONCURRENCY = 3;
 
 // Singleton emitter — Controller subscribe vào đây để gửi SSE
 const scraperEmitter = new EventEmitter();
@@ -127,88 +142,97 @@ async function _executePipeline(job) {
 
     emit('log', { message: `📋 Tổng danh sách slug thu thập: ${allSlugs.length} bài` });
 
-    // --- Bước 2: Cào từng bài cho đến khi đủ limit ---
-    let newlyInserted = 0;
-
-    for (let i = 0; i < allSlugs.length; i++) {
-      if (job.stopRequested) {
-        emit('log', { message: '🛑 Job bị dừng bởi người dùng.' });
-        break;
-      }
-      if (newlyInserted >= job.limit) {
-        emit('log', { message: `✅ Đã đạt giới hạn ${job.limit} bài mới. Dừng cào.` });
-        break;
-      }
-
-      const slug = allSlugs[i];
-      job.currentIndex = i + 1;
-
-      // Kiểm tra đã có trong DB chưa
+    // --- Bước 2: Lọc slug chưa có trong DB, giới hạn theo limit ---
+    const slugsToProcess = [];
+    for (const slug of allSlugs) {
+      if (slugsToProcess.length >= job.limit) break;
       const exists = await isProblemExists(slug);
-      if (exists) {
-        job.skipped++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'skipped',
-          message: `⏭ [${i + 1}] ${slug}: đã tồn tại`,
-        });
-        continue;
-      }
-
-      // Cào raw data
-      const extracted = await fetchAndSaveRawData(slug);
-      if (!extracted) {
-        job.failed++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'failed',
-          message: `❌ [${i + 1}] ${slug}: lỗi cào mạng`,
-        });
-        await sleep(1500);
-        continue;
-      }
-
-      // Transform & lưu DB
-      const saved = await processJsonFile(slug);
-      if (saved) {
-        job.inserted++;
-        newlyInserted++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'inserted',
-          message: `✔ [${i + 1}] ${slug}: thêm mới thành công`,
-        });
-      } else {
-        job.failed++;
-        emit('progress', {
-          current: i + 1,
-          total: allSlugs.length,
-          inserted: job.inserted,
-          skipped: job.skipped,
-          failed: job.failed,
-          slug,
-          result: 'failed',
-          message: `❌ [${i + 1}] ${slug}: lỗi lưu DB`,
-        });
-      }
-
-      await sleep(1800); // Rate-limit friendly
+      if (!exists) slugsToProcess.push(slug);
     }
+
+    job.totalNew = slugsToProcess.length;
+    job.skipped = allSlugs.length - slugsToProcess.length;
+    emit('log', { message: `🆕 Số bài cần cào mới: ${slugsToProcess.length} (bỏ qua ${job.skipped} bài đã có)` });
+
+    // --- Bước 3: Cào song song với SCRAPE_CONCURRENCY workers ---
+    const aiPromises = [];
+    let aiSlotCount = 0;
+    const aiSlotResolvers = [];
+    const waitForAiSlot = () => {
+      if (aiSlotCount < AI_CONCURRENCY || job.stopRequested) return Promise.resolve();
+      return new Promise(r => { aiSlotResolvers.push(r); });
+    };
+    const releaseAiSlot = () => {
+      if (aiSlotResolvers.length > 0) aiSlotResolvers.shift()();
+    };
+
+    let workerIndex = 0;
+    const runWorker = async () => {
+      while (!job.stopRequested) {
+        const i = workerIndex++;
+        if (i >= slugsToProcess.length) break;
+
+        if (job.stopRequested) break;
+        const slug = slugsToProcess[i];
+
+        if (job.stopRequested) break;
+        const extracted = await fetchAndSaveRawData(slug);
+        if (!extracted) {
+          job.failed++;
+          emit('progress', {
+            current: i + 1, total: slugsToProcess.length,
+            inserted: job.inserted, skipped: job.skipped, failed: job.failed,
+            slug, result: 'failed',
+            message: `❌ [${i + 1}] ${slug}: lỗi cào mạng`,
+          });
+          await cancellableSleep(2000, job);
+          continue;
+        }
+
+        if (job.stopRequested) break;
+        const saved = await processJsonFile(slug);
+        if (saved) {
+          job.inserted++;
+          emit('progress', {
+            current: i + 1, total: slugsToProcess.length,
+            inserted: job.inserted, skipped: job.skipped, failed: job.failed,
+            slug, result: 'inserted',
+            message: `✔ [${i + 1}] ${slug}: thêm mới`,
+          });
+
+          // AI non‑blocking, tối đa AI_CONCURRENCY
+          if (!job.stopRequested) {
+            await waitForAiSlot();
+            if (!job.stopRequested) {
+              const p = generateSolution(slug).finally(() => {
+                aiSlotCount--;
+                releaseAiSlot();
+              });
+              aiSlotCount++;
+              aiPromises.push(p);
+            }
+          }
+        } else {
+          job.failed++;
+          emit('progress', {
+            current: i + 1, total: slugsToProcess.length,
+            inserted: job.inserted, skipped: job.skipped, failed: job.failed,
+            slug, result: 'failed',
+            message: `❌ [${i + 1}] ${slug}: lỗi lưu DB`,
+          });
+        }
+
+        // Rate‑limit: mỗi worker nghỉ 2s giữa các request (có thể cancel)
+        await cancellableSleep(2000, job);
+      }
+    };
+
+    const workers = Array.from({ length: SCRAPE_CONCURRENCY }, () => runWorker());
+    await Promise.allSettled(workers);
+
+    // Đợi tất cả AI hoàn thành
+    emit('log', { message: '⏳ Đang đợi AI sinh solution cho các bài đã cào...' });
+    await Promise.allSettled(aiPromises);
   } catch (err) {
     emit('error', { message: `💥 Lỗi nghiêm trọng: ${err.message}` });
   } finally {

@@ -22,14 +22,32 @@ async function processJsonFile(slug) {
 
         // 1. Phân tích HTML
         const $ = cheerio.load(detail.content);
-        const examples = [];
+        const testCaseData = [];
+        const exampleData = [];
         $('pre').each((i, el) => {
             const text = $(el).text();
             if (text.includes('Input:') && text.includes('Output:')) {
                 let input = text.split('Input:')[1].split('Output:')[0].trim();
                 let outputPart = text.split('Output:')[1];
-                let output = outputPart.includes('Explanation:') ? outputPart.split('Explanation:')[0].trim() : outputPart.trim();
-                examples.push({ input, expectedOutput: output, orderIndex: i, isHidden: false });
+                let explanation = outputPart.includes('Explanation:') ? outputPart.split('Explanation:')[1].trim() : null;
+                let output = explanation ? outputPart.split('Explanation:')[0].trim() : outputPart.trim();
+                testCaseData.push({ input, expectedOutput: output, orderIndex: i, isHidden: false });
+                exampleData.push({ input, output, explanation, orderIndex: i });
+            }
+        });
+
+        const constraintsData = [];
+        $('ul').each((i, ul) => {
+            // Chỉ lấy <ul> chứa constraint (thường có text như "1 <= ..." hoặc "* ...")
+            // và không phải là list trong example
+            const lis = $(ul).find('li');
+            if (lis.length > 0) {
+                lis.each((j, li) => {
+                    const content = $(li).text().trim();
+                    if (content && content.length < 200) {
+                        constraintsData.push({ content, orderIndex: constraintsData.length });
+                    }
+                });
             }
         });
 
@@ -37,6 +55,12 @@ async function processJsonFile(slug) {
         const allTags = [{ name: "Algorithms", slug: "algorithms" }, ...(detail.topicTags || [])];
         const diffMap = { "Easy": 0, "Medium": 1, "Hard": 2 };
         
+        // Gom metadata: giữ metaData gốc + solutionHtml
+        const baseMetadata = detail.metaData ? JSON.parse(detail.metaData) : {};
+        if (detail.solutionHtml) {
+            baseMetadata.solutionHtml = detail.solutionHtml;
+        }
+
         const seenLanguages = new Set();
         const templatesToCreate = (detail.codeSnippets || [])
             .map(snip => {
@@ -64,14 +88,15 @@ async function processJsonFile(slug) {
 
         await prisma.problem.create({
             data: {
-                id: detail.questionId,
                 title: detail.title,
                 slug: slug,
                 description: detail.content,
                 difficulty: diffMap[detail.difficulty] ?? 1,
                 isActive: true,
-                metadata: detail.metaData ? JSON.parse(detail.metaData) : null,
-                testCases: { create: examples },
+                metadata: baseMetadata,
+                testCases: { create: testCaseData },
+                examples: { create: exampleData },
+                constraints: { create: constraintsData },
                 problemTags: {
                     create: allTags.map(tag => ({
                         tag: {

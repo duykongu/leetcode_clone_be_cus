@@ -111,10 +111,12 @@ class problemsService {
         title: true,
         description: true,
         difficulty: true,
+        metadata: true,
         codeTemplates: {
           select: {
             language: true,
             starterCode: true,
+            solutionCode: true,
           }
         },
         testCases: {
@@ -147,6 +149,15 @@ class problemsService {
           orderBy: { orderIndex: "asc" },
           select: {
             content: true,
+          }
+        },
+        solution: {
+          select: {
+            explanation: true,
+            timeComplexity: true,
+            spaceComplexity: true,
+            contentHtml: true,
+            codeSnippets: true,
           }
         },
         ...(userId && {
@@ -271,6 +282,52 @@ class problemsService {
       throw error;
     }
     return { success: true, data: { id: problemId } };
+  }
+
+  async updateProblem(id, data) {
+    const { title, description, difficulty } = data;
+
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (difficulty !== undefined) updateData.difficulty = difficulty;
+
+    const problem = await problemsRepository.updateProblem({
+      where: { id },
+      data: updateData,
+    });
+
+    if (!problem) {
+      const error = new Error("Problem not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw error;
+    }
+
+    return {
+      success: true,
+      message: "Problem updated successfully",
+      data: problem,
+    };
+  }
+
+  async deleteProblem(id) {
+    const problem = await problemsRepository.getProblemDetail({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!problem) {
+      const error = new Error("Problem not found");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw error;
+    }
+
+    await problemsRepository.deleteProblem({ where: { id } });
+
+    return {
+      success: true,
+      message: "Problem deleted successfully",
+    };
   }
 }
 
