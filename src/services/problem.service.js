@@ -30,8 +30,15 @@ class problemsService {
       ...(search && {
         OR: [{ title: { contains: search } }, { slug: { contains: search } }],
       }),
-    };
-
+    }; 
+    if (category && category !== "all-code-essentials") {
+      where.problemTags = {
+        some: {
+          tag: { slug: category.toLowerCase() }
+        }
+      };
+    }
+    
     const difficultyMap = {
       Easy: PROBLEM_DIFFICULTY.EASY,
       Medium: PROBLEM_DIFFICULTY.MEDIUM,
@@ -58,6 +65,13 @@ class problemsService {
             select: { isSolved: true },
           },
         }),
+      // 2. THÊM ĐOẠN NÀY: Yêu cầu Prisma trả thêm thông tin các Thẻ (Tags)
+        problemTags: {
+          select: {
+            tag: { select: { name: true } }
+          },
+          take: 3 // Chỉ lấy tối đa 3 tag hiển thị cho đẹp
+        }
       },
       page,
       limit,
@@ -248,6 +262,15 @@ class problemsService {
       success: true,
       message: "Problem imported/updated successfully",
     };
+  }
+  async getRandomProblem(userId) {
+    const problemId = await problemsRepository.getRandomProblemId(userId);
+    if (!problemId) {
+      const error = new Error("Tuyệt vời! Bạn đã giải hết toàn bộ bài tập trên hệ thống.");
+      error.statusCode = HTTP_STATUS.NOT_FOUND;
+      throw error;
+    }
+    return { success: true, data: { id: problemId } };
   }
 }
 

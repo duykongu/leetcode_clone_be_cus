@@ -25,6 +25,7 @@ class AnnouncementService {
       data: {
         title: data.title,
         content: data.content,
+        isPinned: data.isPinned || false,
         authorId: userId
       }
     });

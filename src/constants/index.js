@@ -27,28 +27,29 @@ const PROBLEM_DIFFICULTY = {
 
 
 // config cho kiểu data
+// config cho kiểu data
 const TYPE_MAP = {
-"java": {
-    "integer": "int",
-    "integer[]": "int[]",
-    "string": "String",
-    "string[]": "String[]",
-    "boolean": "boolean",
-    "boolean[]": "boolean[]",
-    "listNode": "ListNode",
-    "treeNode": "TreeNode"
+  "java": {
+    "integer": "int", "integer[]": "int[]", "integer[][]": "int[][]",
+    "long": "long", "long[]": "long[]", "long[][]": "long[][]",
+    "double": "double", "double[]": "double[]", "double[][]": "double[][]",
+    "float": "float", "float[]": "float[]", "float[][]": "float[][]",
+    "string": "String", "string[]": "String[]", "string[][]": "String[][]",
+    "character": "char", "character[]": "char[]", "character[][]": "char[][]",
+    "boolean": "boolean", "boolean[]": "boolean[]", "boolean[][]": "boolean[][]",
+    "listNode": "ListNode", "treeNode": "TreeNode"
   },
   "cpp": {
-    "integer": "int",
-    "integer[]": "vector<int>",
-    "string": "string",
-    "string[]": "vector<string>",
-    "boolean": "bool",
-    "listNode": "ListNode*",
-    "treeNode": "TreeNode*"
+    "integer": "int", "integer[]": "vector<int>", "integer[][]": "vector<vector<int>>",
+    "long": "long long", "long[]": "vector<long long>", "long[][]": "vector<vector<long long>>",
+    "double": "double", "double[]": "vector<double>", "double[][]": "vector<vector<double>>",
+    "float": "float", "float[]": "vector<float>", "float[][]": "vector<vector<float>>",
+    "string": "string", "string[]": "vector<string>", "string[][]": "vector<vector<string>>",
+    "character": "char", "character[]": "vector<char>", "character[][]": "vector<vector<char>>",
+    "boolean": "bool", "boolean[]": "vector<bool>", "boolean[][]": "vector<vector<bool>>",
+    "listNode": "ListNode*", "treeNode": "TreeNode*"
   }
 };
-
 module.exports = {
   HTTP_STATUS,
   SUBMISSION_STATUS,

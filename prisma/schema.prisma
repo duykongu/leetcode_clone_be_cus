@@ -65,6 +65,8 @@ model User {
   announcements Announcement[]
   discussions   Discussion[]
   comments      Comment[]
+  commentInteractions  UserCommentInteraction[]
+  interactions  UserDiscussionInteraction[]
 
   @@map("users")
 }
@@ -270,6 +272,7 @@ model Discussion {
   content   String   @db.LongText
   tags      Json?    // Lưu mảng tags ví dụ: ["Python", "Algorithm"]
   isPinned  Boolean  @default(false) @map("is_pinned") 
+  isDeleted Boolean  @default(false) @map("is_deleted")
   upvotes   Int      @default(0)
   views     Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
@@ -278,6 +281,8 @@ model Discussion {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   problem   Problem?  @relation(fields: [problemId], references: [id], onDelete: Cascade)
   comments  Comment[]
+  
+  interactions UserDiscussionInteraction[]
 
   @@map("discussions")
 }
@@ -288,6 +293,7 @@ model Comment {
   discussionId String   @map("discussion_id") @db.Char(36)
   userId       String   @map("user_id") @db.Char(36)
   content      String   @db.Text
+  isPinned     Boolean    @default(false) @map("is_pinned")
   parentId     String?  @map("parent_id") @db.Char(36) // Dùng để reply bình luận
   upvotes      Int      @default(0)
   createdAt    DateTime @default(now()) @map("created_at")
@@ -298,6 +304,45 @@ model Comment {
   
   parent       Comment?   @relation("CommentToComment", fields: [parentId], references: [id], onDelete: Cascade)
   replies      Comment[]  @relation("CommentToComment")
+  interactions UserCommentInteraction[]
 
   @@map("comments")
+}
+
+/// ================= USER_DISCUSSION_INTERACTIONS =================
+model UserDiscussionInteraction {
+  userId       String   @map("user_id") @db.Char(36)
+  discussionId String   @map("discussion_id") @db.Char(36)
+  
+  // 1 = Upvote (Like), -1 = Downvote (Dislike), 0 = Không làm gì
+  voteType     Int      @default(0) @map("vote_type") 
+  
+  // Trạng thái lưu bài
+  isSaved      Boolean  @default(false) @map("is_saved")
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  discussion   Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  // Khóa chính kép: Chặn đứng tình trạng spam Like/Save
+  @@id([userId, discussionId])
+  @@map("user_discussion_interactions")
+}
+
+/// ================= USER_COMMENT_INTERACTIONS =================
+model UserCommentInteraction {
+  userId       String   @map("user_id") @db.Char(36)
+  commentId    String   @map("comment_id") @db.Char(36)
+  voteType     Int      @default(0) @map("vote_type") // 1: Like, -1: Dislike, 0: Hủy
+  
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment      Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@map("user_comment_interactions")
 }

@@ -8,7 +8,11 @@ class AnnouncementRepository extends BaseRepository {
   // Hàm chuyên biệt: Lấy thông báo mới nhất kèm thông tin người đăng
   async getLatestAnnouncements(limit = 10) {
     return this.prisma.announcement.findMany({
-      orderBy: { createdAt: 'desc' },
+      // BỔ SUNG SẮP XẾP KÉP: Ghim lên trước, sau đó mới đến thời gian
+      orderBy: [
+        { isPinned: 'desc' }, 
+        { createdAt: 'desc' }
+      ],
       take: limit,
       include: {
         author: {

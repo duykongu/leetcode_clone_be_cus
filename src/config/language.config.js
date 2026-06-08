@@ -51,6 +51,19 @@ class TreeNode {
 }
 `,
   cpp: `
+namespace nlohmann {
+    template <>
+    struct adl_serializer<char> {
+        static void from_json(const json& j, char& c) {
+            std::string s = j.get<std::string>();
+            c = s.empty() ? '\\0' : s[0];
+        }
+        static void to_json(json& j, char c) {
+            j = std::string(1, c);
+        }
+    };
+}
+
 struct ListNode {
     int val;
     ListNode *next;
@@ -97,9 +110,13 @@ const LANGUAGE_CONFIG = {
     runArgs: (dir) => ['run', '--rm', '-i', '-v', `${dir}:/app`, '-w', '/app', '--memory=256m', '--network=none', 'python:3.9-slim', 'python', 'solution.py'],
     wrapper: (userCode, metadata) => {
       const methodName = metadata.name || "main";
+      const returnType = metadata.return?.type || "void";
+      
       return `import sys
 import json
-${COMMON_STRUCTURES.javascript}
+from typing import *
+import collections
+${COMMON_STRUCTURES.python}
 ${userCode}
 
 def _run_wrapper():
@@ -113,6 +130,10 @@ def _run_wrapper():
         
         res = getattr(sol, '${methodName}')(*args)
         
+        # Xử lý In-place: Nếu hàm trả về void/None, kết quả chính là tham số đầu tiên
+        if '${returnType}' == 'void':
+            res = args[0]
+        
         if isinstance(res, list):
             print(json.dumps(res).replace(' ', ''))
         elif isinstance(res, bool):
@@ -120,7 +141,8 @@ def _run_wrapper():
         else:
             print(json.dumps(res))
     except Exception as e:
-        print(f"Error: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
 
 if __name__ == '__main__':
     _run_wrapper()`;
@@ -134,6 +156,8 @@ if __name__ == '__main__':
     runArgs: (dir) => ['run', '--rm', '-i', '-v', `${dir}:/app`, '-w', '/app', '--memory=256m', '--network=none', 'node:18-alpine', 'node', 'solution.js'],
     wrapper: (userCode, metadata) => {
       const methodName = metadata.name || "main";
+      const returnType = metadata.return?.type || "void";
+      
       return `
 const fs = require('fs');
 ${COMMON_STRUCTURES.javascript}
@@ -146,8 +170,12 @@ function _run_wrapper() {
     
     try {
         const args = lines.map(line => JSON.parse(line));
+        let res = ${methodName}(...args);
         
-        const res = ${methodName}(...args);
+        // Xử lý In-place
+        if ('${returnType}' === 'void') {
+            res = args[0];
+        }
         
         if (Array.isArray(res)) {
             console.log(JSON.stringify(res).replace(/\\s/g, ''));
@@ -164,48 +192,41 @@ _run_wrapper();`;
     }
   },
 
-  "typescript": {
+"typescript": {
     image: "node:18-alpine",
     fileName: "solution.ts",
     compileCmd: (dir) => `docker run --rm -v "${dir}:/app" -w /app ts-leetcode tsc solution.ts --target es2020 --module commonjs`,
-    runArgs: (dir) => [
-    'run',
-    '--rm',
-    '-i',
-    '-v',
-    `${dir}:/app`,
-    '-w',
-    '/app',
-    '--memory=256m',
-    '--network=none',
-    'node:18-alpine',
-    'node',
-    'solution.js'
-  ],
-   wrapper: (userCode, metadata) => {
-    const methodName = metadata.name || "main";
+    runArgs: (dir) => ['run', '--rm', '-i', '-v', `${dir}:/app`, '-w', '/app', '--memory=256m', '--network=none', 'node:18-alpine', 'node', 'solution.js'],
+    wrapper: (userCode, metadata) => {
+      const methodName = metadata.name || "main";
+      const returnType = metadata.return?.type || "void";
+      
+      // LOGIC MỚI XỬ LÝ TRÁNH LỖI TS2367: 
+      // Kiểm tra ngay tại Node.js, chỉ in code ra file ts nếu thực sự là hàm void
+      const inPlaceLogic = returnType === 'void' ? 'result = parsedArgs[0];' : '';
+
       return `
 declare var require: any;
 const fs = require('fs');
-${COMMON_STRUCTURES.javascript}
+${COMMON_STRUCTURES.typescript}
 ${userCode}
 
 function _run_wrapper() {
    const rawInput: string = fs.readFileSync(0, 'utf-8').trim();
 
     if (!rawInput) return;
-
     const lines: string[] = rawInput
         .split('\\n')
         .filter((line: string) => line.trim().length > 0);
-
     try {
         const parsedArgs: any[] = lines.map(
             (line: string) => JSON.parse(line)
         );
-
         const fn: any = ${methodName};
-        const result: any = fn(...parsedArgs);
+        let result: any = fn(...parsedArgs);
+        
+        // Xử lý In-place an toàn
+        ${inPlaceLogic}
 
         if (Array.isArray(result)) {
             console.log(JSON.stringify(result).replace(/\\s/g, ''));
@@ -230,9 +251,9 @@ _run_wrapper();`;
     wrapper: (userCode, metadata) => {
       const methodName = metadata.name || "main";
       const params = metadata.params || [];
-      const returnType = metadata.return?.type || "string";
-      const cppReturnType = TYPE_MAP["cpp"][returnType] || "string";
-
+      const returnType = metadata.return?.type || "void";
+      const cppReturnType = returnType === "void" ? "void" : (TYPE_MAP["cpp"][returnType] || "string");
+      
       let readParamsCode = '';
       let methodArgs = [];
 
@@ -245,8 +266,23 @@ _run_wrapper();`;
 `;
         methodArgs.push(`arg${index}`);
       });
-
       const argsString = methodArgs.join(', ');
+
+      // Chia logic in kết quả tùy theo hàm void hay hàm return
+      let execCode = '';
+      if (returnType === "void") {
+          execCode = `
+        sol.${methodName}(${argsString});
+        json j_res = arg0;
+        cout << j_res.dump() << endl;
+          `;
+      } else {
+          execCode = `
+        ${cppReturnType} res = sol.${methodName}(${argsString});
+        json j_res = res;
+        cout << j_res.dump() << endl;
+          `;
+      }
 
       return `
 #include <iostream>
@@ -255,17 +291,14 @@ _run_wrapper();`;
 #include <json.hpp>
 using namespace std;
 using json = nlohmann::json;
-${COMMON_STRUCTURES.javascript}
+${COMMON_STRUCTURES.cpp}
 ${userCode}
 
 int main() {
     Solution sol;
     while (true) {
 ${readParamsCode}
-        ${cppReturnType} res = sol.${methodName}(${argsString});
-        
-        json j_res = res;
-        cout << j_res.dump() << endl;
+${execCode}
     }
     return 0;
 }`;
@@ -280,9 +313,9 @@ ${readParamsCode}
     wrapper: (userCode, metadata) => {
       const methodName = metadata.name || "main";
       const params = metadata.params || [];
-      const returnType = metadata.return?.type || "string";
-      const javaReturnType = TYPE_MAP["java"][returnType] || "String";
-
+      const returnType = metadata.return?.type || "void";
+      const javaReturnType = returnType === "void" ? "void" : (TYPE_MAP["java"][returnType] || "String");
+      
       let readParamsCode = '';
       let methodArgs = [];
 
@@ -298,11 +331,25 @@ ${readParamsCode}
 
       const argsString = methodArgs.join(', ');
 
+      // Chia logic in kết quả
+      let execCode = '';
+      if (returnType === "void") {
+          execCode = `
+                sol.${methodName}(${argsString});
+                System.out.println(gson.toJson(arg0).replaceAll("\\\\s+", ""));
+          `;
+      } else {
+          execCode = `
+                ${javaReturnType} res = sol.${methodName}(${argsString});
+                System.out.println(gson.toJson(res).replaceAll("\\\\s+", ""));
+          `;
+      }
+
       return `
 import java.util.*;
 import java.io.*;
 import com.google.gson.*;
-${COMMON_STRUCTURES.javascript}
+${COMMON_STRUCTURES.java}
 ${userCode}
 
 public class Main {
@@ -310,12 +357,10 @@ public class Main {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         Gson gson = new Gson();
         Solution sol = new Solution();
-        
         outerLoop: while (true) {
             try {
 ${readParamsCode}
-                ${javaReturnType} res = sol.${methodName}(${argsString});
-                System.out.println(gson.toJson(res).replaceAll("\\\\s+", ""));
+${execCode}
             } catch (Exception e) {
                 break;
             }

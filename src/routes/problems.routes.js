@@ -6,6 +6,7 @@ const { PERMISSIONS } = require('../constants/permissions');
 
 // Public routes
 router.get('/', authMiddleware.optionalAuth, problemsController.getProblems);
+router.get('/random', authMiddleware.optionalAuth, problemsController.getRandomProblem);
 router.get('/:id', authMiddleware.optionalAuth, problemsController.getProblemDetail);
 
 // Admin only routes

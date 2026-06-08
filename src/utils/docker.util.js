@@ -34,7 +34,8 @@ const cleanupWorkspace = (runDir) => {
  */
 const compileCode = (compileCmd, runDir) => {
   return new Promise((resolve) => {
-    exec(compileCmd(runDir), (err, stdout, stderr) => {
+    // Thêm { timeout: 60000 } (60 giây) để ngắt ngay lập tức nếu code cố tình lặp vô hạn lúc biên dịch
+    exec(compileCmd(runDir), { timeout: 60000 }, (err, stdout, stderr) => {
       if (err) resolve({ success: false, error: stdout || stderr || err.message });
       else resolve({ success: true });
     });

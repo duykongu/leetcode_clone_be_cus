@@ -7,7 +7,7 @@ const dockerUtil = require('../utils/docker.util');
 
 class ExecutionService {
   async runCode(data) {
-    let { code, language, problemId, userId } = data;
+    let { code, language, problemId, userId,isSubmit } = data;
     language = language.toLowerCase();
     // 1. Kiểm tra ngôn ngữ và đề bài
     const config = LANGUAGE_CONFIG[language];
@@ -49,18 +49,19 @@ class ExecutionService {
   
     try {
       // 4. Biên dịch code
-      if (config.compileCmd) {
+        if (config.compileCmd) {
         const compileResult = await dockerUtil.compileCode(config.compileCmd, runDir);
         if (!compileResult.success) {
-        //Xử lý "Chạy Test" vs "Nộp Bài"
-          //nếu chạy test thì ko lưu
+          // Xử lý Lỗi Biên Dịch (Compile Error)
+          const compileErrorMsg = compileResult.error;
+
           if (!isSubmit) {
-            return { success: finalStatus === SUBMISSION_STATUS.ACCEPTED, status: finalStatus, passed: passedCases, total: testCases.length, message: errorMessage, submissionId: null };
+            return { success: false, status: SUBMISSION_STATUS.COMPILE_ERROR, passed: 0, total: testCases.length, message: compileErrorMsg, submissionId: null };
           }
-          //nếu nộp thì lưu
-           return await submissionRepository.saveSubmissionRecord(
-               userId, problemId, language, code, finalStatus, passedCases, testCases.length, errorMessage
-           );
+          
+          return await submissionRepository.saveSubmissionRecord(
+              userId, problemId, language, code, SUBMISSION_STATUS.COMPILE_ERROR, 0, testCases.length, compileErrorMsg
+          );
         }
       }
 
@@ -89,7 +90,7 @@ class ExecutionService {
 
       // ================= SỬA LỖI Ở ĐÂY =================
       // 6. Xử lý "Chạy Test" vs "Nộp Bài"
-      if (!data.isSubmit) {
+      if (!isSubmit) {
         // NẾU CHỈ LÀ CHẠY CODE -> Trả về luôn, không lưu Database
         return { success: finalStatus === SUBMISSION_STATUS.ACCEPTED, status: finalStatus, passed: passedCases, total: testCases.length, message: errorMessage, submissionId: null };
       }
