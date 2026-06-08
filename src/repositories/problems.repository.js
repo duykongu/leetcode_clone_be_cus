@@ -53,6 +53,16 @@ class problemsRepository extends BaseRepository {
       ...(include && { include }),
     });
   }
+
+  async updateProblem(params = {}) {
+    const { where, data } = params;
+    return await this.prisma.problem.update({ where, data });
+  }
+
+  async deleteProblem(params = {}) {
+    const { where } = params;
+    return await this.prisma.problem.delete({ where });
+  }
 }
 
 module.exports = new problemsRepository();

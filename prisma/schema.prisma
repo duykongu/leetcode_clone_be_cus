@@ -121,10 +121,28 @@ model Problem {
   userProblems  UserProblemStatus[]
   examples      ProblemExample[]
   constraints   ProblemConstraint[]
+  solution      ProblemSolution?
 
   discussions   Discussion[]
   
   @@map("problems")
+}
+
+/// ================= PROBLEM_SOLUTIONS =================
+model ProblemSolution {
+  id              String   @id @default(uuid()) @db.Char(36)
+  problemId       String   @map("problem_id") @db.Char(36) @unique
+  explanation     String   @db.LongText
+  timeComplexity  String?  @map("time_complexity") @db.VarChar(50)
+  spaceComplexity String?  @map("space_complexity") @db.VarChar(50)
+  contentHtml     String?  @map("content_html") @db.LongText
+  codeSnippets    Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("problem_solutions")
 }
 
 /// ================= PROBLEM_TAGS =================

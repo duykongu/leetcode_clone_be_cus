@@ -78,6 +78,32 @@ class ProblemsController {
       });
     }
   }
+
+  updateProblem = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await this.problemService.updateProblem(id, req.body);
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || 'Error',
+      });
+    }
+  }
+
+  deleteProblem = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await this.problemService.deleteProblem(id);
+      res.json(result);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        message: err.message || 'Error',
+      });
+    }
+  }
 }
 
 module.exports = ProblemsController;

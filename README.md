@@ -58,6 +58,7 @@ HOST=localhost
 
 # JWT (optional - khi triển khai auth)
 # JWT_SECRET=your_jwt_secret
+# OPENROUTER_API_KEY=MY_KEY
 ```
 
 ### 4. Thiết lập database
