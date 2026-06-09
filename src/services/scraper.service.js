@@ -1,10 +1,3 @@
-/**
- * FILE: src/services/scraper.service.js
- *
- * Service quản lý tiến trình cào bài tập.
- * Dùng EventEmitter để đẩy progress real-time ra SSE endpoint.
- */
-
 const EventEmitter = require('events');
 const { getFreeProblemList, fetchAndSaveRawData } = require('../tools/scraper/extractor');
 const { processJsonFile, disconnectDB, isProblemExists } = require('../tools/scraper/transformer');
@@ -12,7 +5,6 @@ const { generateSolution } = require('./ai.service');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Interruptible sleep — kiểm tra stopRequested mỗi 200ms
 const cancellableSleep = async (ms, job) => {
   const step = 200;
   let remaining = ms;
@@ -23,19 +15,30 @@ const cancellableSleep = async (ms, job) => {
   }
 };
 
+function waitForStopSignal(job) {
+  if (job.stopRequested) return Promise.resolve();
+  return new Promise(r => {
+    job._stopResolvers = job._stopResolvers || [];
+    job._stopResolvers.push(r);
+  });
+}
+
+async function withCancellation(fn, job) {
+  if (job.stopRequested) return undefined;
+  return Promise.race([
+    fn(),
+    waitForStopSignal(job).then(() => undefined),
+  ]);
+}
+
 const AI_CONCURRENCY = 5;
 const SCRAPE_CONCURRENCY = 3;
 
-// Singleton emitter — Controller subscribe vào đây để gửi SSE
 const scraperEmitter = new EventEmitter();
 scraperEmitter.setMaxListeners(50);
 
-// Trạng thái toàn cục của job đang chạy (chỉ 1 job tại một thời điểm)
 let activeJob = null;
 
-/**
- * Trả về trạng thái job hiện tại (dùng cho GET /scraper/status)
- */
 function getJobStatus() {
   if (!activeJob) return { running: false };
   return { running: true, ...activeJob };
@@ -44,29 +47,30 @@ function getJobStatus() {
 function stopJob() {
   if (activeJob) {
     activeJob.stopRequested = true;
+    if (activeJob._aiSlotResolvers) {
+      while (activeJob._aiSlotResolvers.length > 0) {
+        activeJob._aiSlotResolvers.shift()();
+      }
+    }
+    if (activeJob._stopResolvers) {
+      while (activeJob._stopResolvers.length > 0) {
+        activeJob._stopResolvers.shift()();
+      }
+    }
     emit('log', { message: '🛑 Người dùng yêu cầu dừng job. Đang kết thúc...' });
     emit('stop', { message: 'Đã ghi nhận lệnh dừng.' });
   }
 }
 
-/**
- * Hàm emit helper — gửi event ra emitter VÀ cập nhật activeJob
- */
 function emit(event, data) {
   scraperEmitter.emit(event, data);
   if (activeJob) {
-    // Ghi vào log của job để SSE client mới connect vẫn lấy được history
     activeJob.log = activeJob.log || [];
     activeJob.log.push({ event, data, ts: Date.now() });
-    if (activeJob.log.length > 500) activeJob.log.shift(); // giới hạn bộ nhớ
+    if (activeJob.log.length > 500) activeJob.log.shift();
   }
 }
 
-/**
- * Chạy pipeline cào batch:
- * - limit: số bài tối đa cần cào mới (bỏ qua bài đã tồn tại)
- * - categories: mảng các danh mục ['algorithms','database',...]
- */
 async function runBatchScrape({ limit = 50, categories = ['algorithms'] }) {
   if (activeJob && !activeJob.done) {
     return { success: false, message: 'Đang có job đang chạy. Vui lòng đợi hoặc dừng trước.' };
@@ -85,9 +89,10 @@ async function runBatchScrape({ limit = 50, categories = ['algorithms'] }) {
     totalQueued: 0,
     currentIndex: 0,
     log: [],
+    _aiSlotResolvers: [],
+    _stopResolvers: [],
   };
 
-  // Chạy async - không await để trả về ngay cho HTTP response
   _executePipeline(activeJob).catch((err) => {
     emit('error', { message: err.message });
   });
@@ -112,7 +117,7 @@ async function _executePipeline(job) {
   });
 
   try {
-    // --- Bước 1: Thu thập danh sách slug từ tất cả category được chọn ---
+    // --- Bước 1: Thu thập danh sách slug ---
     let allSlugs = [];
 
     for (const cat of job.categories) {
@@ -120,14 +125,14 @@ async function _executePipeline(job) {
 
       emit('log', { message: `📁 Đang lấy danh sách bài từ danh mục: ${cat.toUpperCase()}...` });
 
-      const BATCH = 200; // lấy 200 slug mỗi lần gọi API để đảm bảo đủ bài sau khi lọc
+      const BATCH = 200;
       let skip = 0;
       let catSlugs = [];
       let hasMore = true;
 
       while (hasMore && catSlugs.length < job.limit * 2) {
         if (job.stopRequested) { hasMore = false; break; }
-        const slugs = await getFreeProblemList(BATCH, skip, cat);
+        const slugs = await withCancellation(() => getFreeProblemList(BATCH, skip, cat), job);
         if (!slugs || slugs.length === 0) { hasMore = false; break; }
         catSlugs = catSlugs.concat(slugs);
         if (slugs.length < BATCH) { hasMore = false; break; }
@@ -139,18 +144,17 @@ async function _executePipeline(job) {
       allSlugs = allSlugs.concat(catSlugs);
     }
 
-    // Deduplicate
     allSlugs = [...new Set(allSlugs)];
     job.totalQueued = allSlugs.length;
 
     emit('log', { message: `📋 Tổng danh sách slug thu thập: ${allSlugs.length} bài` });
 
-    // --- Bước 2: Lọc slug chưa có trong DB, giới hạn theo limit ---
+    // --- Bước 2: Lọc slug chưa có trong DB ---
     const slugsToProcess = [];
     for (const slug of allSlugs) {
       if (job.stopRequested) break;
       if (slugsToProcess.length >= job.limit) break;
-      const exists = await isProblemExists(slug);
+      const exists = await withCancellation(() => isProblemExists(slug), job);
       if (!exists) slugsToProcess.push(slug);
     }
 
@@ -158,16 +162,15 @@ async function _executePipeline(job) {
     job.skipped = allSlugs.length - slugsToProcess.length;
     emit('log', { message: `🆕 Số bài cần cào mới: ${slugsToProcess.length} (bỏ qua ${job.skipped} bài đã có)` });
 
-    // --- Bước 3: Cào song song với SCRAPE_CONCURRENCY workers ---
+    // --- Bước 3: Cào song song ---
     const aiPromises = [];
     let aiSlotCount = 0;
-    const aiSlotResolvers = [];
     const waitForAiSlot = () => {
       if (aiSlotCount < AI_CONCURRENCY || job.stopRequested) return Promise.resolve();
-      return new Promise(r => { aiSlotResolvers.push(r); });
+      return new Promise(r => { job._aiSlotResolvers.push(r); });
     };
     const releaseAiSlot = () => {
-      if (aiSlotResolvers.length > 0) aiSlotResolvers.shift()();
+      if (job._aiSlotResolvers.length > 0) job._aiSlotResolvers.shift()();
     };
 
     let workerIndex = 0;
@@ -180,8 +183,9 @@ async function _executePipeline(job) {
         const slug = slugsToProcess[i];
 
         if (job.stopRequested) break;
-        const extracted = await fetchAndSaveRawData(slug);
+        const extracted = await withCancellation(() => fetchAndSaveRawData(slug), job);
         if (!extracted) {
+          if (job.stopRequested) break;
           job.failed++;
           emit('progress', {
             current: i + 1, total: slugsToProcess.length,
@@ -194,7 +198,7 @@ async function _executePipeline(job) {
         }
 
         if (job.stopRequested) break;
-        const saved = await processJsonFile(slug);
+        const saved = await withCancellation(() => processJsonFile(slug), job);
         if (saved) {
           job.inserted++;
           emit('progress', {
@@ -204,7 +208,6 @@ async function _executePipeline(job) {
             message: `✔ [${i + 1}] ${slug}: thêm mới`,
           });
 
-          // AI non‑blocking, tối đa AI_CONCURRENCY
           if (!job.stopRequested) {
             await waitForAiSlot();
             if (!job.stopRequested) {
@@ -217,6 +220,7 @@ async function _executePipeline(job) {
             }
           }
         } else {
+          if (job.stopRequested) break;
           job.failed++;
           emit('progress', {
             current: i + 1, total: slugsToProcess.length,
@@ -226,7 +230,6 @@ async function _executePipeline(job) {
           });
         }
 
-        // Rate‑limit: mỗi worker nghỉ 2s giữa các request (có thể cancel)
         await cancellableSleep(2000, job);
       }
     };
@@ -234,7 +237,6 @@ async function _executePipeline(job) {
     const workers = Array.from({ length: SCRAPE_CONCURRENCY }, () => runWorker());
     await Promise.allSettled(workers);
 
-    // Đợi tất cả AI hoàn thành (trừ khi đã yêu cầu dừng)
     if (!job.stopRequested) {
       emit('log', { message: '⏳ Đang đợi AI sinh solution cho các bài đã cào...' });
       await Promise.allSettled(aiPromises);
