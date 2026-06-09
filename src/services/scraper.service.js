@@ -44,6 +44,8 @@ function getJobStatus() {
 function stopJob() {
   if (activeJob) {
     activeJob.stopRequested = true;
+    emit('log', { message: '🛑 Người dùng yêu cầu dừng job. Đang kết thúc...' });
+    emit('stop', { message: 'Đã ghi nhận lệnh dừng.' });
   }
 }
 
@@ -124,12 +126,13 @@ async function _executePipeline(job) {
       let hasMore = true;
 
       while (hasMore && catSlugs.length < job.limit * 2) {
+        if (job.stopRequested) { hasMore = false; break; }
         const slugs = await getFreeProblemList(BATCH, skip, cat);
         if (!slugs || slugs.length === 0) { hasMore = false; break; }
         catSlugs = catSlugs.concat(slugs);
         if (slugs.length < BATCH) { hasMore = false; break; }
         skip += BATCH;
-        await sleep(800);
+        await cancellableSleep(800, job);
       }
 
       emit('log', { message: `   → Tìm thấy ${catSlugs.length} bài miễn phí trong [${cat}]` });
@@ -145,6 +148,7 @@ async function _executePipeline(job) {
     // --- Bước 2: Lọc slug chưa có trong DB, giới hạn theo limit ---
     const slugsToProcess = [];
     for (const slug of allSlugs) {
+      if (job.stopRequested) break;
       if (slugsToProcess.length >= job.limit) break;
       const exists = await isProblemExists(slug);
       if (!exists) slugsToProcess.push(slug);
@@ -230,21 +234,29 @@ async function _executePipeline(job) {
     const workers = Array.from({ length: SCRAPE_CONCURRENCY }, () => runWorker());
     await Promise.allSettled(workers);
 
-    // Đợi tất cả AI hoàn thành
-    emit('log', { message: '⏳ Đang đợi AI sinh solution cho các bài đã cào...' });
-    await Promise.allSettled(aiPromises);
+    // Đợi tất cả AI hoàn thành (trừ khi đã yêu cầu dừng)
+    if (!job.stopRequested) {
+      emit('log', { message: '⏳ Đang đợi AI sinh solution cho các bài đã cào...' });
+      await Promise.allSettled(aiPromises);
+    } else {
+      emit('log', { message: '⏭ Bỏ qua AI solution do người dùng yêu cầu dừng.' });
+    }
   } catch (err) {
     emit('error', { message: `💥 Lỗi nghiêm trọng: ${err.message}` });
   } finally {
     job.done = true;
     job.endTime = new Date().toISOString();
 
+    const stopped = job.stopRequested;
     emit('done', {
       jobId: job.id,
       inserted: job.inserted,
       skipped: job.skipped,
       failed: job.failed,
-      message: `🎉 Hoàn tất! Thêm mới: ${job.inserted} | Bỏ qua: ${job.skipped} | Lỗi: ${job.failed}`,
+      stopped,
+      message: stopped
+        ? `🛑 Đã dừng! Thêm mới: ${job.inserted} | Bỏ qua: ${job.skipped} | Lỗi: ${job.failed}`
+        : `🎉 Hoàn tất! Thêm mới: ${job.inserted} | Bỏ qua: ${job.skipped} | Lỗi: ${job.failed}`,
     });
 
     await disconnectDB();
