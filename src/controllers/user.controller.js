@@ -74,6 +74,64 @@ class UserController {
       });
     }
   }
+
+  getSavedProblems = async (req, res) => {
+    try {
+      const { page, limit } = getPagination(req.query, 20);
+      const result = await this.profileService.getSavedProblems(req.user.id, page, limit);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false, message: err.message,
+      });
+    }
+  }
+
+  toggleSaveProblem = async (req, res) => {
+    try {
+      const result = await this.profileService.toggleSaveProblem(req.user.id, req.params.problemId);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false, message: err.message,
+      });
+    }
+  }
+
+  getSubmissions = async (req, res) => {
+    try {
+      const { page, limit } = getPagination(req.query, 20);
+      const result = await this.profileService.getSubmissions(req.user.id, page, limit);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false, message: err.message,
+      });
+    }
+  }
+
+  getUserDiscussions = async (req, res) => {
+    try {
+      const { page, limit } = getPagination(req.query, 20);
+      const result = await this.profileService.getUserDiscussions(req.user.id, page, limit);
+      res.json({ success: true, ...result });
+    } catch (err) {
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false, message: err.message,
+      });
+    }
+  }
+
+  getSubmissionDetail = async (req, res) => {
+    try {
+      const submission = await this.profileService.getSubmissionDetail(req.user.id, req.params.submissionId);
+      res.json({ success: true, data: submission });
+    } catch (err) {
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false, message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = UserController;

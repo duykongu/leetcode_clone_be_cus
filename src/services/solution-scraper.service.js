@@ -2,13 +2,13 @@ const axios = require('axios');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODELS = [
-  'openrouter/free',
-  'openrouter/auto',
-];
+
+const COCOLINK_BASE_URL = 'https://www.cocolink.ai/v1';
+const AI_MODEL = 'deepseek-v4-flash';
 const MAX_RETRIES = 2;
-const TIMEOUT = 90000;
+const TIMEOUT = 120000;
+
+const SUPPORTED_LANGUAGES = ['javascript', 'python', 'java', 'cpp'];
 
 function stripHtml(str) {
   if (!str) return '';
@@ -20,77 +20,85 @@ function truncate(str, max) {
   return str.length > max ? str.substring(0, max) : str;
 }
 
-async function generateSolution(slug) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function tryParseJson(raw) {
+  let cleaned = raw.replace(/^```(json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (lastBrace > 10) {
+      try {
+        return JSON.parse(cleaned.substring(0, lastBrace + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function extractError(err) {
+  if (err.response?.data?.error?.message) return err.response.data.error.message;
+  if (err.response?.data?.error) return JSON.stringify(err.response.data.error);
+  if (err.message) return err.message;
+  return 'Unknown error';
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function fetchSolutionFromAI(problem) {
+  const apiKey = process.env.COCOLINK_API_KEY;
   if (!apiKey) {
-    console.log(`   [AI] ⚠ Bỏ qua ${slug}: chưa set OPENROUTER_API_KEY`);
-    return false;
-  }
-
-  const skip = await prisma.problemSolution.findFirst({
-    where: { problem: { slug } },
-  });
-  if (skip) {
-    console.log(`   [AI] ⏭ ${slug}: đã có solution, bỏ qua`);
-    return true;
-  }
-
-  const problem = await prisma.problem.findUnique({
-    where: { slug },
-    include: { codeTemplates: true, testCases: { take: 3 } },
-  });
-
-  if (!problem) {
-    console.log(`   [AI] ⚠ Không tìm thấy problem: ${slug}`);
-    return false;
+    console.log('   [Solution] ⚠ Chưa set COCOLINK_API_KEY');
+    return null;
   }
 
   const prompt = buildPrompt(problem);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
-      console.log(`   [AI] 🔄 Retry ${attempt}/${MAX_RETRIES} cho ${slug}...`);
+      console.log(`   [Solution] 🔄 Retry ${attempt}/${MAX_RETRIES}...`);
       await sleep(2000 * attempt);
     }
 
-    for (const model of MODELS) {
-      try {
-        console.log(`   [AI] 🤖 Đang sinh solution cho ${slug} (model: ${model})...`);
+    try {
+      const res = await axios.post(`${COCOLINK_BASE_URL}/chat/completions`, {
+        model: AI_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 16384,
+        response_format: { type: 'json_object' },
+      }, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: TIMEOUT,
+      });
 
-        const res = await axios.post(OPENROUTER_URL, {
-          model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 8192,
-          response_format: { type: 'json_object' },
-        }, {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://leetcode-clone.local',
-          },
-          timeout: TIMEOUT,
-        });
-
-        const raw = res.data.choices[0].message.content.trim();
-        const parsed = tryParseJson(raw);
-        if (!parsed) {
-          console.log(`   [AI] ⚠ JSON lỗi, thử model khác...`);
-          continue;
-        }
-
-        await saveSolution(problem, parsed);
-        console.log(`   [AI] ✔ Đã lưu solution cho ${slug}`);
-        return true;
-
-      } catch (err) {
-        const detail = extractError(err);
-        console.log(`   [AI] ✘ ${model} thất bại: ${detail}`);
+      const raw = res.data.choices[0].message.content.trim();
+      const parsed = tryParseJson(raw);
+      if (!parsed) {
+        console.log('   [Solution] ⚠ JSON lỗi, retry...');
+        continue;
       }
+
+      return {
+        explanation: parsed.explanation || `Solution for ${problem.title}`,
+        timeComplexity: parsed.timeComplexity || null,
+        spaceComplexity: parsed.spaceComplexity || null,
+        code: parsed.code || {},
+      };
+    } catch (err) {
+      console.log(`   [Solution] ✘ Lỗi AI: ${extractError(err)}`);
     }
   }
 
-  console.error(`   [AI] ✘ Tất cả model đều thất bại cho ${slug}`);
-  return false;
+  return null;
 }
 
 function buildPrompt(problem) {
@@ -101,19 +109,14 @@ function buildPrompt(problem) {
     .map(t => `Language: ${t.language}\n\`\`\`${t.language}\n${t.starterCode}\n\`\`\``)
     .join('\n\n');
 
-  const testExamples = problem.testCases
-    .map((tc, i) => `Example ${i + 1}:\nInput: ${tc.input}\nOutput: ${tc.expectedOutput}`)
-    .join('\n\n');
-
   return `You are a LeetCode solution writer. Solve this problem and return ONLY a JSON object. Write the explanation in Vietnamese.
 
 Title: ${problem.title}
 Difficulty: ${difficultyLabel}
 Description: ${cleanDescription}
 
-${testExamples ? `Examples:\n${testExamples}` : ''}
-
-Starter code:\n${codeExamples}
+Starter code:
+${codeExamples}
 
 Return this exact JSON:
 {
@@ -129,57 +132,49 @@ Return this exact JSON:
 }`;
 }
 
-function tryParseJson(raw) {
-  let cleaned = raw.replace(/^```(json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const lastBrace = cleaned.lastIndexOf('}');
-    if (lastBrace > 10) {
-      try {
-        return JSON.parse(cleaned.substring(0, lastBrace + 1));
-      } catch {
-        return extractPartialResult(cleaned);
-      }
-    }
-    return null;
-  }
-}
-
-function extractPartialResult(text) {
-  const result = { explanation: '', timeComplexity: '', spaceComplexity: '', code: {} };
-
-  const expMatch = text.match(/"explanation"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-  if (expMatch) result.explanation = expMatch[1];
-
-  const timeMatch = text.match(/"timeComplexity"\s*:\s*"([^"]+)"/);
-  if (timeMatch) result.timeComplexity = timeMatch[1];
-
-  const spaceMatch = text.match(/"spaceComplexity"\s*:\s*"([^"]+)"/);
-  if (spaceMatch) result.spaceComplexity = spaceMatch[1];
-
-  for (const lang of ['javascript', 'python', 'java', 'cpp']) {
-    const codeMatch = text.match(new RegExp(`"${lang}"\\s*:\\s*"((?:[^"\\x5c]|\\x5c.)*)"`));
-    if (codeMatch) result.code[lang] = codeMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+async function generateSolution(slug) {
+  const existing = await prisma.problemSolution.findFirst({
+    where: { problem: { slug } },
+  });
+  if (existing) {
+    console.log(`   [Solution] ⏭ ${slug}: đã có solution, bỏ qua`);
+    return true;
   }
 
-  if (result.explanation) return result;
-  return null;
+  const problem = await prisma.problem.findUnique({
+    where: { slug },
+    include: { codeTemplates: true },
+  });
+
+  if (!problem) {
+    console.log(`   [Solution] ⚠ Không tìm thấy problem: ${slug}`);
+    return false;
+  }
+
+  console.log(`   [Solution] 🤖 Đang sinh solution cho ${slug} bằng AI...`);
+
+  const result = await fetchSolutionFromAI(problem);
+  if (!result) {
+    console.log(`   [Solution] ⚠ ${slug}: AI không sinh được solution`);
+    return false;
+  }
+
+  await saveSolution(problem, result);
+  console.log(`   [Solution] ✔ Đã lưu solution cho ${slug}`);
+  return true;
 }
 
 async function saveSolution(problem, parsed) {
   const explanation = stripHtml(parsed.explanation || '');
-  const timeComplexity = truncate(stripHtml(parsed.timeComplexity || ''), 50);
-  const spaceComplexity = truncate(stripHtml(parsed.spaceComplexity || ''), 50);
+  const timeComplexity = parsed.timeComplexity ? truncate(stripHtml(parsed.timeComplexity), 50) : null;
+  const spaceComplexity = parsed.spaceComplexity ? truncate(stripHtml(parsed.spaceComplexity), 50) : null;
   const code = parsed.code || {};
 
-  const supportedLanguages = ['javascript', 'python', 'java', 'cpp'];
   const codeSnippets = {};
   const templateUpdates = [];
 
-  for (const lang of supportedLanguages) {
-    const snippet = (code && code[lang]) || '';
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const snippet = code[lang] || '';
     if (snippet) {
       codeSnippets[lang] = snippet;
       const template = problem.codeTemplates.find(t => t.language === lang);
@@ -234,11 +229,11 @@ function buildSolutionHtml({ title, difficulty, explanation, timeComplexity, spa
     .join('\n');
 
   const codeCards = Object.entries(codeSnippets)
-    .filter(([, code]) => code)
-    .map(([lang, code]) => `
+    .filter(([, c]) => c)
+    .map(([lang, c]) => `
 <details class="sc-dtls"${lang === 'javascript' ? ' open' : ''}>
   <summary class="sc-smry">${langLabels[lang] || lang}</summary>
-  <div class="sc-cb"><pre>${escapeHtml(code)}</pre></div>
+  <div class="sc-cb"><pre>${escapeHtml(c)}</pre></div>
 </details>`)
     .join('\n');
 
@@ -281,23 +276,5 @@ function buildSolutionHtml({ title, difficulty, explanation, timeComplexity, spa
 
 </div>`;
 }
-
-function extractError(err) {
-  if (err.response?.data?.error?.message) return err.response.data.error.message;
-  if (err.response?.data?.error) return JSON.stringify(err.response.data.error);
-  if (err.message) return err.message;
-  if (err.code) return `HTTP ${err.code}`;
-  return 'Unknown error';
-}
-
-function capitalize(s) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 module.exports = { generateSolution };

@@ -40,7 +40,7 @@ getDiscussions = async (req, res) => {
       const result = await this.discussionService.interact(req.user.id, req.params.id, req.body.action);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ success: false, message: err.message });
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -49,7 +49,7 @@ getDiscussions = async (req, res) => {
       const result = await this.discussionService.deleteDiscussion(req.user, req.params.id);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ success: false, message: err.message });
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -58,7 +58,7 @@ getDiscussions = async (req, res) => {
       const result = await this.discussionService.togglePin(req.user, req.params.id);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ success: false, message: err.message });
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -92,19 +92,15 @@ addComment = async (req, res) => {
       const result = await this.discussionService.updateDiscussion(req.user, req.params.id, req.body);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({ success: false, message: err.message });
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
   deleteComment = async (req, res) => {
-    try { 
-      // Kiểm tra xem 2 cái này có undefined không?
-      console.log("Discussion ID:", req.params.id); 
-      console.log("Comment ID:", req.params.commentId);
-      
+    try {
       const result = await this.discussionService.deleteComment(req.user, req.params.id, req.params.commentId);
       res.json(result);
     } catch (err) { 
-      res.status(err.statusCode || 500).json({ success: false, message: err.message });
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -112,20 +108,20 @@ addComment = async (req, res) => {
     try {
       const result = await this.discussionService.updateComment(req.user, req.params.commentId, req.body.content);
       res.json(result);
-    } catch (err) { res.status(err.statusCode || 500).json({ success: false, message: err.message }); }
+    } catch (err) { res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message }); }
   }
 
   togglePinComment = async (req, res) => {
     try {
       const result = await this.discussionService.togglePinComment(req.user, req.params.id, req.params.commentId);
       res.json(result);
-    } catch (err) { res.status(err.statusCode || 500).json({ success: false, message: err.message }); }
+    } catch (err) { res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message }); }
   }
   interactComment = async (req, res) => {
     try {
       const result = await this.discussionService.interactComment(req.user.id, req.params.commentId, req.body.action);
       res.json(result);
-    } catch (err) { res.status(err.statusCode || 500).json({ success: false, message: err.message }); }
+    } catch (err) { res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message }); }
   }
 }
 

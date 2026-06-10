@@ -1,60 +1,65 @@
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
 const { tokenRepository: tokenRepo } = require("../repositories");
 const { HTTP_STATUS } = require("../constants");
+
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function getJwtSecret() {
+  return process.env.JWT_SECRET || 'leetcode-jwt-secret-dev';
+}
+
+function getRefreshSecret() {
+  return process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'leetcode-refresh-secret-dev';
+}
 
 class TokenService {
   generateToken(user) {
     return jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '15m' }
+      { id: user.id, email: user.email, role: user.role },
+      getJwtSecret(),
+      { expiresIn: "15m" }
     );
   }
 
   generateRefreshToken(user) {
-    const refreshToken = jwt.sign(
+    return jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'refresh_secret',
-      { expiresIn: '7d' }
+      getRefreshSecret(),
+      { expiresIn: "7d" }
     );
-    return refreshToken;
   }
 
   async storeRefreshToken(userId, refreshToken) {
-    const tokenHash = await bcrypt.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const tokenHash = hashToken(refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await tokenRepo.createRefreshToken(userId, tokenHash, expiresAt);
-
     return refreshToken;
   }
 
   async refreshToken(refreshToken) {
     if (!refreshToken) {
-      throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: 'Refresh token is required' };
+      throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: "Refresh token is required" };
     }
 
-    const tokenHash = await bcrypt.hash(refreshToken, 10);
+    const tokenHash = hashToken(refreshToken);
     const storedToken = await tokenRepo.findRefreshToken(tokenHash);
 
     if (!storedToken) {
-      throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: 'Invalid refresh token', code: 'INVALID_REFRESH_TOKEN' };
+      throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: "Invalid refresh token", code: "INVALID_REFRESH_TOKEN" };
     }
 
     if (storedToken.revoked) {
-      throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' };
+      throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: "Refresh token has been revoked", code: "REFRESH_TOKEN_REVOKED" };
     }
 
     if (storedToken.expiresAt < new Date()) {
-      throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: 'Refresh token expired', code: 'REFRESH_TOKEN_EXPIRED' };
+      throw { statusCode: HTTP_STATUS.UNAUTHORIZED, message: "Refresh token expired", code: "REFRESH_TOKEN_EXPIRED" };
     }
 
-    // Revoke the used refresh token (rotate)
     await tokenRepo.revokeRefreshToken(tokenHash);
 
     const user = storedToken.user;
@@ -64,28 +69,28 @@ class TokenService {
     return {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      expiresIn: 15 * 60, // 15 minutes in seconds
+      expiresIn: 15 * 60,
     };
   }
 
   verifyToken(token) {
-    return jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    return jwt.verify(token, getJwtSecret());
   }
 
   async revokeRefreshToken(token) {
     if (!token) {
-      throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: 'Refresh token is required' };
+      throw { statusCode: HTTP_STATUS.BAD_REQUEST, message: "Refresh token is required" };
     }
 
-    const tokenHash = await bcrypt.hash(token, 10);
+    const tokenHash = hashToken(token);
     const storedToken = await tokenRepo.findRefreshToken(tokenHash);
 
     if (!storedToken) {
-      throw { statusCode: HTTP_STATUS.NOT_FOUND, message: 'Refresh token not found' };
+      throw { statusCode: HTTP_STATUS.NOT_FOUND, message: "Refresh token not found" };
     }
 
     await tokenRepo.revokeRefreshToken(tokenHash);
-    return { message: 'Refresh token revoked successfully' };
+    return { message: "Refresh token revoked successfully" };
   }
 }
 

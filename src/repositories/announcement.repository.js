@@ -8,9 +8,8 @@ class AnnouncementRepository extends BaseRepository {
   // Hàm chuyên biệt: Lấy thông báo mới nhất kèm thông tin người đăng
   async getLatestAnnouncements(limit = 10) {
     return this.prisma.announcement.findMany({
-      // BỔ SUNG SẮP XẾP KÉP: Ghim lên trước, sau đó mới đến thời gian
       orderBy: [
-        { isPinned: 'desc' }, 
+        { isPinned: 'desc' },
         { createdAt: 'desc' }
       ],
       take: limit,
@@ -20,6 +19,22 @@ class AnnouncementRepository extends BaseRepository {
         }
       }
     });
+  }
+
+  async getAnnouncementsPaginated(page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+    const orderBy = [
+      { isPinned: 'desc' },
+      { createdAt: 'desc' }
+    ];
+    const include = {
+      author: { select: { username: true, avatarUrl: true, role: true } }
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.announcement.findMany({ skip, take: limit, orderBy, include }),
+      this.prisma.announcement.count(),
+    ]);
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
   // Lấy chi tiết 1 thông báo
   async getAnnouncementById(id) {

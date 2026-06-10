@@ -1,16 +1,15 @@
+const { getPagination } = require('../utils/pagination');
 const { HTTP_STATUS } = require('../constants');
 
 class AnnouncementController {
-  // Lễ tân nhận Quản lý (Service) vào để giao việc
   constructor({ announcementService }) {
     this.announcementService = announcementService;
   }
 
-  // Khách gọi hàm lấy bảng tin
   getHomeAnnouncements = async (req, res) => {
     try {
-      // Chọc vô: announcementService (Quản lý) để đòi danh sách
-      const result = await this.announcementService.getHomeAnnouncements();
+      const { page, limit } = getPagination(req.query, 10);
+      const result = await this.announcementService.getHomeAnnouncements(page, limit);
       res.json(result);
     } catch (err) {
       res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({

@@ -6,16 +6,30 @@ const { PERMISSIONS } = require("../constants/permissions");
 
 class problemsService {
   async getStats() {
-    const [userCount, problemCount] = await Promise.all([
+    const [userCount, problemCount, totalSubmissions, difficultyStats, submissionTrend, resultDistribution, topProblems] = await Promise.all([
       userRepository.count(),
       problemsRepository.count(),
+      problemsRepository.getTotalSubmissionsCount(),
+      problemsRepository.getDifficultyUserStats(),
+      problemsRepository.getSubmissionTrend(7),
+      problemsRepository.getSubmissionResultDistribution(),
+      problemsRepository.getTopSolvedProblems(10),
     ]);
+
+    const acceptedCount = resultDistribution.find(r => r.status === 'accepted')?.count || 0;
+    const acRate = totalSubmissions > 0 ? Math.round((acceptedCount / totalSubmissions) * 100) : 0;
+
     return {
       success: true,
       data: {
         totalUsers: userCount,
         totalProblems: problemCount,
-        totalSubmissions: 0,
+        totalSubmissions,
+        acRate,
+        difficultyStats,
+        submissionTrend,
+        resultDistribution,
+        topProblems,
       },
     };
   }

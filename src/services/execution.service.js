@@ -88,39 +88,59 @@ class ExecutionService {
         }
       }
 
-      // 5. Chạy test case
+      // 5. Chạy test case — KHÔNG break khi sai, gom kết quả từng testcase
       let passedCases = 0;
       let finalStatus = SUBMISSION_STATUS.ACCEPTED;
       let errorMessage = "";
+      const testCaseResults = [];
 
       for (const tc of testCases) {
         let cleanInput = String(tc.input || "").replace(/^input:\s*/i, '').trim().replace(/[a-zA-Z_0-9]+\s*=\s*/g, '').trim();
         const runResult = await dockerUtil.executeSingleTestCase(config.runArgs(runDir), cleanInput);
 
+        const tcResult = {
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          actualOutput: runResult.output || "",
+          passed: false,
+          status: SUBMISSION_STATUS.WRONG_ANSWER,
+        };
+
         if (runResult.status === SUBMISSION_STATUS.TIME_LIMIT_EXCEEDED || runResult.status === SUBMISSION_STATUS.RUNTIME_ERROR) {
-          finalStatus = runResult.status;
-          errorMessage = runResult.output;
-          break; 
+          tcResult.status = runResult.status;
+          tcResult.actualOutput = runResult.output || "";
+          testCaseResults.push(tcResult);
+          if (!errorMessage) errorMessage = runResult.output;
+          if (finalStatus === SUBMISSION_STATUS.ACCEPTED) finalStatus = runResult.status;
+          continue;
         }
 
         if (!compareOutput(runResult.output, tc.expectedOutput)) {
+          tcResult.actualOutput = runResult.output || "";
+          testCaseResults.push(tcResult);
+          if (!errorMessage) errorMessage = `Input: ${tc.input}\nExpected: ${tc.expectedOutput}\nGot: ${runResult.output}`;
           finalStatus = SUBMISSION_STATUS.WRONG_ANSWER;
-          errorMessage = `Input: ${tc.input}\nExpected: ${tc.expectedOutput}\nGot: ${runResult.output}`;
-          break; 
+          continue;
         }
+
+        tcResult.passed = true;
+        tcResult.status = SUBMISSION_STATUS.ACCEPTED;
+        testCaseResults.push(tcResult);
         passedCases++;
       }
 
       // 6. Xử lý "Chạy Test" vs "Nộp Bài"
       if (!isSubmit) {
         // NẾU CHỈ LÀ CHẠY CODE -> Trả về luôn, không lưu Database
-        return { success: finalStatus === SUBMISSION_STATUS.ACCEPTED, status: finalStatus, passed: passedCases, total: testCases.length, message: errorMessage, submissionId: null };
+        return { success: finalStatus === SUBMISSION_STATUS.ACCEPTED, status: finalStatus, passed: passedCases, total: testCases.length, message: errorMessage, submissionId: null, testCaseResults };
       }
 
       // NẾU LÀ NỘP BÀI -> Gọi Repository để lưu lịch sử và tính Streak
-      return await submissionRepository.saveSubmissionRecord(
+      const submitResult = await submissionRepository.saveSubmissionRecord(
         userId, problem.id, language, code, finalStatus, passedCases, testCases.length, errorMessage
       );
+      submitResult.testCaseResults = testCaseResults;
+      return submitResult;
 
     } finally {
       // 7. Dọn dẹp

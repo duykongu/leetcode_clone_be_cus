@@ -23,12 +23,12 @@ class AuthService {
       throw { statusCode: HTTP_STATUS.CONFLICT, message: "Email đã tồn tại" };
     }
 
-    const passWordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
     const user = await userRepo.createAccount(
       {
         username,
         email,
-        passwordHash: passWordHash,
+        passwordHash,
       },
       {
         select: {
@@ -56,12 +56,11 @@ class AuthService {
         email: true,
         role: true,
         createdAt: true,
-        role: true,
         passwordHash: true,
 
-        solvedCount: true, 
-        streakDays: true, 
-        avatarUrl: true,  
+        solvedCount: true,
+        streakDays: true,
+        avatarUrl: true,
       },
     });
     if (!user) {

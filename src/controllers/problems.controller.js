@@ -1,4 +1,5 @@
 const { getPagination } = require('../utils/pagination');
+const { HTTP_STATUS } = require('../constants');
 
 class ProblemsController {
   constructor({ problemService }) {
@@ -10,7 +11,7 @@ class ProblemsController {
       const stats = await this.problemService.getStats();
       res.json(stats);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || "Error",
       });
@@ -30,7 +31,7 @@ class ProblemsController {
       const result = await this.problemService.getProblems(page, limit, user, filters);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error',
         ...(err.code && { code: err.code }),
@@ -45,7 +46,7 @@ class ProblemsController {
       const result = await this.problemService.getProblemDetail(id, userId);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error',
         ...(err.code && { code: err.code }),
@@ -59,7 +60,7 @@ class ProblemsController {
       const result = await this.problemService.importProblem(problemData);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error',
       });
@@ -72,7 +73,7 @@ class ProblemsController {
       const result = await this.problemService.getRandomProblem(userId);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error',
       });
@@ -85,7 +86,7 @@ class ProblemsController {
       const result = await this.problemService.updateProblem(id, req.body);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error',
       });
@@ -98,7 +99,7 @@ class ProblemsController {
       const result = await this.problemService.deleteProblem(id);
       res.json(result);
     } catch (err) {
-      res.status(err.statusCode || 500).json({
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error',
       });
