@@ -1,1 +1,0 @@
-chạy file seed.js để đẩy dữ liệu giao diện ban đầu -> hết

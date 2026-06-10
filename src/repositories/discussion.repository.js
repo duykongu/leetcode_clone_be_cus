@@ -11,9 +11,16 @@ class DiscussionRepository extends BaseRepository {
     
     // 1. MẶC ĐỊNH LÀ ẨN CÁC BÀI ĐÃ XÓA (isDeleted: false)
     const where = { isDeleted: false };
-
+    
     if (filters.problemId) where.problemId = filters.problemId;
-    if (filters.search) where.title = { contains: filters.search };
+    if (filters.search) {
+      where.OR = [
+        { title: { contains: filters.search } },
+        { content: { contains: filters.search } },
+        // Prisma hỗ trợ tìm kiếm chuỗi nằm bên trong cột dữ liệu dạng JSON (Tags)
+        { tags: { string_contains: filters.search } } 
+      ];
+    }
 
     // 2. NẾU ĐANG Ở TAB "ĐÃ LƯU" VÀ CÓ LOGIN
     if (filters.isSaved && userId) {

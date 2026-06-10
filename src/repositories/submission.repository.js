@@ -22,34 +22,39 @@ class SubmissionRepository {
         // 2. LOGIC TÍNH STREAK (Ép kiểu ngày tháng String YYYY-MM-DD để chống lỗi Múi giờ)
         const userObj = await tx.user.findUnique({ where: { id: userId }, select: { streakDays: true, lastActive: true } });
         
-        // Hàm chuyển Date sang chuỗi "YYYY-MM-DD" theo giờ Việt Nam (+7)
+        // Hàm chuyển Date sang chuỗi YYYY-MM-DD chuẩn múi giờ Việt Nam
         const getVnDateString = (dateObj) => {
             if (!dateObj) return null;
             const vnTime = new Date(dateObj.getTime() + (7 * 60 * 60 * 1000));
             return vnTime.toISOString().split('T')[0];
         };
 
-        const todayStr = getVnDateString(new Date());
+        const now = new Date();
+        const todayStr = getVnDateString(now);
         const lastActiveStr = getVnDateString(userObj.lastActive);
 
-        // NẾU LÀ LẦN NỘP ĐẦU TIÊN TRONG NGÀY HÔM NAY (last_active KHÁC ngày hôm nay)
+        // NẾU HÔM NAY CHƯA NỘP BÀI (Chặn việc cộng dồn nhiều lần trong 1 ngày)
         if (lastActiveStr !== todayStr) {
             
-            // Tính chuỗi ngày hôm qua để xem có nối được chuỗi không
-            const yesterday = new Date();
+            const yesterday = new Date(now);
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = getVnDateString(yesterday);
 
-            let newStreak = 0; // Khởi tạo mặc định (Reset về 0 nếu đứt chuỗi)
+            // MẶC ĐỊNH: Bị đứt chuỗi hoặc lần đầu nộp -> Tính là ngày 1 của chuỗi mới
+            let newStreak = 1; 
             
-            // Nếu ngày nộp cuối cùng TRÙNG KHỚP với ngày hôm qua -> Nối chuỗi
+            // Nếu ngày nộp cuối cùng TRÙNG KHỚP với ngày hôm qua -> Nối chuỗi thêm 1
             if (lastActiveStr === yesterdayStr) {
                 newStreak = (userObj.streakDays || 0) + 1;
             }
 
+            // 🔥 TRICK CHỐNG TRÔI NGÀY DB: Ép giờ lưu là 12:00:00 trưa (UTC). 
+            // Giúp MySQL (@db.Date) luôn lưu chuẩn xác ngày Việt Nam dù user nộp bài lúc rạng sáng!
+            const safeDateForDB = new Date(`${todayStr}T12:00:00.000Z`);
+
             await tx.user.update({
                 where: { id: userId },
-                data: { streakDays: newStreak, lastActive: new Date() }
+                data: { streakDays: newStreak, lastActive: safeDateForDB }
             });
         }
 

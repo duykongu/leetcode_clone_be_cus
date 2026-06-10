@@ -5,15 +5,38 @@ const LANGUAGE_CONFIG = require('../config/language.config');
 const { formatTestcaseInput } = require('../config/formatter.util'); 
 const dockerUtil = require('../utils/docker.util'); 
 
+const compareOutput = (actual, expected) => {
+    const a = String(actual).trim();
+    const e = String(expected).trim();
+    if (a === e) return true;
+    
+    // Thử so sánh kiểu JSON để bỏ qua khác biệt khoảng trắng trong mảng (VD: [1, 2] và [1,2])
+    try {
+        return JSON.stringify(JSON.parse(a)) === JSON.stringify(JSON.parse(e));
+    } catch {
+        return false;
+    }
+};
+
 class ExecutionService {
   async runCode(data) {
-    let { code, language, problemId, userId,isSubmit } = data;
+    let { code, language, problemId, userId, isSubmit } = data;
     language = language.toLowerCase();
+    
     // 1. Kiểm tra ngôn ngữ và đề bài
     const config = LANGUAGE_CONFIG[language];
     if (!config) return { success: false, message: `Hệ thống chưa hỗ trợ ngôn ngữ: ${language}` };
 
-    const problem = await prisma.problem.findUnique({ where: { id: problemId } });
+    // Dùng findFirst để cho phép tìm bằng ID hoặc Slug
+    const problem = await prisma.problem.findFirst({ 
+        where: { 
+            OR: [
+                { id: problemId },
+                { slug: problemId }
+            ] 
+        } 
+    });
+    
     if (!problem) return { success: false, message: "Bài toán không tồn tại!" };
     if (!problem.metadata) return { success: false, message: "Bài toán chưa được cấu hình!" };
     
@@ -21,7 +44,7 @@ class ExecutionService {
     
     // 2. Lấy Testcases
     let testCases = await prisma.testCase.findMany({
-      where: { problemId: problemId },
+      where: { problemId: problem.id }, // SỬA QUAN TRỌNG: Phải dùng problem.id chuẩn từ Database, không dùng biến problemId từ URL
       orderBy: { orderIndex: 'asc' } 
     });
 
@@ -38,7 +61,7 @@ class ExecutionService {
       return {
         ...tc,
         input: formatTestcaseInput(rawInput), 
-        expectedOutput: String(rawExpected).replace(/\s/g, "") 
+        expectedOutput: String(rawExpected).trim() 
       };
     });
 
@@ -60,18 +83,18 @@ class ExecutionService {
           }
           
           return await submissionRepository.saveSubmissionRecord(
-              userId, problemId, language, code, SUBMISSION_STATUS.COMPILE_ERROR, 0, testCases.length, compileErrorMsg
+              userId, problem.id, language, code, SUBMISSION_STATUS.COMPILE_ERROR, 0, testCases.length, compileErrorMsg
           );
         }
       }
 
-// 5. Chạy test case
+      // 5. Chạy test case
       let passedCases = 0;
       let finalStatus = SUBMISSION_STATUS.ACCEPTED;
       let errorMessage = "";
 
       for (const tc of testCases) {
-        let cleanInput = String(tc.input || "").replace(/^input:\s*/i, '').trim().replace(/[a-zA-Z_]+\s*=\s*/g, '').trim();
+        let cleanInput = String(tc.input || "").replace(/^input:\s*/i, '').trim().replace(/[a-zA-Z_0-9]+\s*=\s*/g, '').trim();
         const runResult = await dockerUtil.executeSingleTestCase(config.runArgs(runDir), cleanInput);
 
         if (runResult.status === SUBMISSION_STATUS.TIME_LIMIT_EXCEEDED || runResult.status === SUBMISSION_STATUS.RUNTIME_ERROR) {
@@ -80,7 +103,7 @@ class ExecutionService {
           break; 
         }
 
-        if (runResult.output !== tc.expectedOutput.trim()) {
+        if (!compareOutput(runResult.output, tc.expectedOutput)) {
           finalStatus = SUBMISSION_STATUS.WRONG_ANSWER;
           errorMessage = `Input: ${tc.input}\nExpected: ${tc.expectedOutput}\nGot: ${runResult.output}`;
           break; 
@@ -88,7 +111,6 @@ class ExecutionService {
         passedCases++;
       }
 
-      // ================= SỬA LỖI Ở ĐÂY =================
       // 6. Xử lý "Chạy Test" vs "Nộp Bài"
       if (!isSubmit) {
         // NẾU CHỈ LÀ CHẠY CODE -> Trả về luôn, không lưu Database
@@ -97,9 +119,8 @@ class ExecutionService {
 
       // NẾU LÀ NỘP BÀI -> Gọi Repository để lưu lịch sử và tính Streak
       return await submissionRepository.saveSubmissionRecord(
-        userId, problemId, language, code, finalStatus, passedCases, testCases.length, errorMessage
+        userId, problem.id, language, code, finalStatus, passedCases, testCases.length, errorMessage
       );
-      // =================================================
 
     } finally {
       // 7. Dọn dẹp
