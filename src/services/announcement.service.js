@@ -2,10 +2,9 @@ const { announcementRepository } = require("../repositories");
 const { HTTP_STATUS } = require("../constants");
 
 class AnnouncementService {
-  // Logic lấy bảng tin
-  async getHomeAnnouncements() {
-    const data = await announcementRepository.getLatestAnnouncements(10);
-    return { success: true, data };
+  async getHomeAnnouncements(page = 1, limit = 10) {
+    const result = await announcementRepository.getAnnouncementsPaginated(page, limit);
+    return { success: true, ...result };
   }
 
   // Logic tạo thông báo (Kiểm tra quyền gắt gao ở đây)

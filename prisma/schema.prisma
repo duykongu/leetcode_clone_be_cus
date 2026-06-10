@@ -67,6 +67,7 @@ model User {
   comments      Comment[]
   commentInteractions  UserCommentInteraction[]
   interactions  UserDiscussionInteraction[]
+  savedProblems UserSavedProblem[]
 
   @@map("users")
 }
@@ -124,7 +125,8 @@ model Problem {
   solution      ProblemSolution?
 
   discussions   Discussion[]
-  
+  savedBy       UserSavedProblem[]
+
   @@map("problems")
 }
 
@@ -363,4 +365,17 @@ model UserCommentInteraction {
 
   @@id([userId, commentId])
   @@map("user_comment_interactions")
+}
+
+/// ================= USER_SAVED_PROBLEMS =================
+model UserSavedProblem {
+  userId    String   @map("user_id") @db.Char(36)
+  problemId String   @map("problem_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@id([userId, problemId])
+  @@map("user_saved_problems")
 }

@@ -14,7 +14,7 @@ const AnnouncementController = require('./controllers/announcement.controller');
 
 const DiscussionService = require('./services/discussion.service');
 const DiscussionController = require('./controllers/discussion.controller');
-// 1. Instantiate Services
+
 const tokenService = new TokenService();
 const authService = new AuthService({ tokenService });
 const profileService = new ProfileService();
@@ -22,12 +22,10 @@ const problemService = new problemsService();
 const executionService = new ExecutionService();
 
 
-//TẠO BẢN SAO SERVICE MỚI 
 const announcementService = new AnnouncementService();
 const discussionService = new DiscussionService();
 
 
-// Instantiate Controllers with injected dependencies
 const authController = new AuthController({
   authService,
   tokenService,
@@ -42,14 +40,11 @@ const userController = new UserController({
   profileService,
 });
 const executionController = new ExecutionController({
-  executionService, // Bơm service vào controller
+  executionService,
 });
 
-
-
-//TẠO BẢN SAO CONTROLLER VÀ "BƠM" SERVICE VÀO:
 const announcementController = new AnnouncementController({
-  announcementService, // Bơm ông Quản lý vào ông Lễ tân
+  announcementService,
 });
 const discussionController = new DiscussionController({ discussionService });
 

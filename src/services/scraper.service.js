@@ -1,7 +1,7 @@
 const EventEmitter = require('events');
 const { getFreeProblemList, fetchAndSaveRawData } = require('../tools/scraper/extractor');
 const { processJsonFile, disconnectDB, isProblemExists } = require('../tools/scraper/transformer');
-const { generateSolution } = require('./ai.service');
+const { generateSolution: scrapeSolution } = require('./solution-scraper.service');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -165,6 +165,7 @@ async function _executePipeline(job) {
     // --- Bước 3: Cào song song ---
     const aiPromises = [];
     let aiSlotCount = 0;
+    const failedSlugs = [];
     const waitForAiSlot = () => {
       if (aiSlotCount < AI_CONCURRENCY || job.stopRequested) return Promise.resolve();
       return new Promise(r => { job._aiSlotResolvers.push(r); });
@@ -211,7 +212,9 @@ async function _executePipeline(job) {
           if (!job.stopRequested) {
             await waitForAiSlot();
             if (!job.stopRequested) {
-              const p = generateSolution(slug).finally(() => {
+              const p = scrapeSolution(slug).then(result => {
+                if (!result) failedSlugs.push(slug);
+              }).finally(() => {
                 aiSlotCount--;
                 releaseAiSlot();
               });
@@ -238,10 +241,14 @@ async function _executePipeline(job) {
     await Promise.allSettled(workers);
 
     if (!job.stopRequested) {
-      emit('log', { message: '⏳ Đang đợi AI sinh solution cho các bài đã cào...' });
+      emit('log', { message: '⏳ Đang đợi sinh solution cho các bài đã cào...' });
       await Promise.allSettled(aiPromises);
+
+      if (failedSlugs.length > 0) {
+        emit('log', { message: `⚠ ${failedSlugs.length} bài không sinh được solution (đã bỏ qua)` });
+      }
     } else {
-      emit('log', { message: '⏭ Bỏ qua AI solution do người dùng yêu cầu dừng.' });
+      emit('log', { message: '⏭ Bỏ qua solution do người dùng yêu cầu dừng.' });
     }
   } catch (err) {
     emit('error', { message: `💥 Lỗi nghiêm trọng: ${err.message}` });

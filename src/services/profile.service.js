@@ -122,6 +122,31 @@ class ProfileService {
       avatarUrl,
     };
   }
+
+  async getSavedProblems(userId, page, limit) {
+    return profileRepo.getSavedProblems(userId, page, limit);
+  }
+
+  async toggleSaveProblem(userId, problemId) {
+    const isSaved = await profileRepo.toggleSaveProblem(userId, problemId);
+    return { isSaved };
+  }
+
+  async getSubmissions(userId, page, limit) {
+    return profileRepo.getSubmissionsList(userId, page, limit);
+  }
+
+  async getSubmissionDetail(userId, submissionId) {
+    const submission = await profileRepo.getSubmissionById(userId, submissionId);
+    if (!submission) {
+      throw { statusCode: HTTP_STATUS.NOT_FOUND, message: 'Submission not found' };
+    }
+    return submission;
+  }
+
+  async getUserDiscussions(userId, page, limit) {
+    return profileRepo.getUserDiscussions(userId, page, limit);
+  }
 }
 
 module.exports = ProfileService;

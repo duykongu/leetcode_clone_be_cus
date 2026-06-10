@@ -1,6 +1,8 @@
 require('dotenv').config();
-  const express = require('express');
-  const cors = require('cors');
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const cors = require('cors');
   const authRoutes        = require('./src/routes/auth.routes');
   const problemsRoutes    = require('./src/routes/problems.routes');
   const userRoutes        = require('./src/routes/user.routes');
@@ -18,7 +20,11 @@ require('dotenv').config();
   app.use('/api/admin/scraper', scraperRoutes);                       // <-- THÊM
 
   // Serve uploaded files
-  app.use('/uploads', express.static('uploads'));
+  const uploadsDir = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(path.join(uploadsDir, 'avatars'), { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsDir));
 
   app.get('/health', (req, res) => res.json({ status: 'OK' }));
   

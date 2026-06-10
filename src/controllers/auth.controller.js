@@ -70,7 +70,6 @@ class AuthController {
         message: 'Logged out successfully',
       });
     } catch (err) {
-      console.error('Logout error:', err);
       res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: err.message || 'Error during logout',
