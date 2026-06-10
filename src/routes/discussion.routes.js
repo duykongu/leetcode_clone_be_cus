@@ -11,6 +11,7 @@ router.get('/:id', authMiddleware.optionalAuth, discussionController.getDiscussi
 router.post('/', authMiddleware.authenticate, discussionController.createDiscussion);
 router.post('/:id/comments', authMiddleware.authenticate, discussionController.addComment);
 router.put('/:id', authMiddleware.authenticate, discussionController.updateDiscussion);
+router.delete('/:id', authMiddleware.authenticate, discussionController.deleteDiscussion);
 
 // Các thao tác Tương tác & Kiểm duyệt
 router.post('/:id/interact', authMiddleware.authenticate, discussionController.interact);

@@ -6,28 +6,47 @@ class problemsRepository extends BaseRepository {
   }
   
   async getRandomProblemId(userId) {
-    let whereCondition = { isActive: true };
-    // Nếu user đã đăng nhập, lọc bỏ những bài họ đã giải xong (isSolved: true)
+    let solvedIds = [];
+    
+    // Nếu user đã đăng nhập, lấy danh sách bài đã giải
     if (userId) {
       const solvedProblems = await this.prisma.userProblemStatus.findMany({
         where: { userId: userId, isSolved: true },
         select: { problemId: true }
       });
-      
-      const solvedIds = solvedProblems.map(s => s.problemId);
-      if (solvedIds.length > 0) {
-        whereCondition.id = { notIn: solvedIds };
-      }
+      solvedIds = solvedProblems.map(s => s.problemId);
     }
-    // Lấy danh sách ID các bài thỏa mãn điều kiện
-    const problems = await this.prisma.problem.findMany({
-      where: whereCondition,
-      select: { id: true }
+
+    // ƯU TIÊN 1: Tìm bài Easy (difficulty = 0) chưa giải
+    let problems = await this.prisma.problem.findMany({
+      where: { isActive: true, difficulty: 0, id: { notIn: solvedIds } },
+      select: { id: true, slug: true } // Lấy cả slug để URL đẹp
     });
+
+    // ƯU TIÊN 2: Hết bài Easy -> Tìm bài Medium (difficulty = 1) chưa giải
+    if (problems.length === 0) {
+      problems = await this.prisma.problem.findMany({
+        where: { isActive: true, difficulty: 1, id: { notIn: solvedIds } },
+        select: { id: true, slug: true }
+      });
+    }
+
+    // ƯU TIÊN 3: Hết bài Medium -> Tìm bài Hard (difficulty = 2) chưa giải
+    if (problems.length === 0) {
+      problems = await this.prisma.problem.findMany({
+        where: { isActive: true, difficulty: 2, id: { notIn: solvedIds } },
+        select: { id: true, slug: true }
+      });
+    }
+
+    // Nếu đã làm hết mọi bài trên hệ thống (hoặc DB rỗng)
     if (problems.length === 0) return null; 
-    // Random 1 index bất kỳ trong mảng
+
+    // Lấy ngẫu nhiên 1 bài trong danh sách vừa lọc
     const randomIndex = Math.floor(Math.random() * problems.length);
-    return problems[randomIndex].id;
+    
+    // Trả về slug nếu có, không có thì trả về id
+    return problems[randomIndex].slug || problems[randomIndex].id;
   }
 
   async getProblems(params = {}) {
@@ -36,8 +55,18 @@ class problemsRepository extends BaseRepository {
 
   async getProblemDetail(params = {}) {
     const { where, select, include } = params;
-    return await this.prisma.problem.findUnique({
-      where,
+    
+    // Tạo câu query linh hoạt: Tìm theo ID HOẶC tìm theo Slug
+    const searchQuery = where.id ? {
+      OR: [
+        { id: where.id },
+        { slug: where.id }
+      ]
+    } : where;
+
+    // Phải đổi thành findFirst vì findUnique không hỗ trợ mệnh đề OR
+    return await this.prisma.problem.findFirst({
+      where: searchQuery,
       ...(select && { select }),
       ...(include && { include }),
     });
