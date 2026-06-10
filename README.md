@@ -50,15 +50,26 @@ Sao chép file `.env.example` thành `.env` và cập nhật các biến:
 
 ```env
 # Database
-DATABASE_URL="mysql://username:password@localhost:3306/leetcode_db"  // Đổi thành url local của mình
+DATABASE_URL="mysql://username:password@localhost:3306/leetcode_db"
 
 # Server
 PORT=5000
 HOST=localhost
 
-# JWT (optional - khi triển khai auth)
-# JWT_SECRET=your_jwt_secret
-# OPENROUTER_API_KEY=MY_KEY
+# JWT
+JWT_SECRET=your_jwt_secret_key_minimum_32_chars
+JWT_REFRESH_SECRET=your_jwt_refresh_secret_key_minimum_32_chars
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# GitHub Token - tăng rate limit GitHub API
+GITHUB_TOKEN=your_github_token
+
+# OpenRouter AI - sinh solution tự động
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# Cocolink AI - thay thế GitHub scraper
+COCOLINK_API_KEY=your_cocolink_api_key
 ```
 
 ### 4. Thiết lập database
@@ -85,7 +96,7 @@ npm run dev
 npm start
 ```
 
-Server chạy tại: `http://localhost:3000`
+Server chạy tại: `http://localhost:5000`
 
 Health check: `GET /health`
 

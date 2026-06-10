@@ -26,6 +26,8 @@ class ProblemsController {
         search: req.query.search,
         category: req.query.category,
         difficulty: req.query.difficulty,
+        sortBy: req.query.sortBy,
+        sortOrder: req.query.sortOrder,
       };
 
       const result = await this.problemService.getProblems(page, limit, user, filters);
