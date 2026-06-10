@@ -97,45 +97,47 @@ Hệ thống LeetCode Clone được thiết kế để phân chia rõ ràng cá
 Sơ đồ Use Case tổng quan thể hiện sự tương tác của 3 tác nhân (Khách vãng lai, Thành viên và Quản trị viên) với hệ thống LeetCode Clone:
 
 ```mermaid
-leftToRightDirection
-actor Guest as "Khách vãng lai"
-actor User as "Thành viên"
-actor Admin as "Quản trị viên"
+graph LR
+    subgraph TacNhan [Tác nhân]
+        Guest["Khách vãng lai"]
+        User["Thành viên"]
+        Admin["Quản trị viên"]
+    end
 
-rectangle "Hệ thống LeetCode Clone" {
-    usecase UC_Auth as "Đăng ký / Đăng nhập / Đăng xuất"
-    usecase UC_ViewProblems as "Xem danh sách & Chi tiết bài tập"
-    usecase UC_RunCode as "Chạy thử code (Sandbox)"
-    usecase UC_SubmitCode as "Nộp bài chấm điểm & Lưu lịch sử"
-    usecase UC_Streak as "Tích lũy Streak ngày nộp bài"
-    usecase UC_ViewForum as "Xem & Tìm kiếm bài thảo luận"
-    usecase UC_InteractForum as "Đăng bài, Bình luận, Upvote/Downvote"
-    usecase UC_ManageProblems as "Thêm, Sửa, Xóa bài tập"
-    usecase UC_ScrapeProblems as "Cào dữ liệu bài tập (LeetCode Scraper)"
-    usecase UC_ManageAnnounce as "Quản lý thông báo bảng tin"
-    usecase UC_PinForum as "Ghim bài viết & Bình luận lên đầu"
-}
+    subgraph HeThong ["Hệ thống LeetCode Clone"]
+        UC_Auth("Đăng ký / Đăng nhập / Đăng xuất")
+        UC_ViewProblems("Xem danh sách & Chi tiết bài tập")
+        UC_RunCode("Chạy thử code (Sandbox)")
+        UC_SubmitCode("Nộp bài chấm điểm & Lưu lịch sử")
+        UC_Streak("Tích lũy Streak ngày nộp bài")
+        UC_ViewForum("Xem & Tìm kiếm bài thảo luận")
+        UC_InteractForum("Đăng bài, Bình luận, Upvote/Downvote")
+        UC_ManageProblems("Thêm, Sửa, Xóa bài tập")
+        UC_ScrapeProblems("Cào dữ liệu bài tập (LeetCode Scraper)")
+        UC_ManageAnnounce("Quản lý thông báo bảng tin")
+        UC_PinForum("Ghim bài viết & Bình luận lên đầu")
+    end
 
-Guest --> UC_Auth
-Guest --> UC_ViewProblems
-Guest --> UC_RunCode
-Guest --> UC_ViewForum
+    Guest --> UC_Auth
+    Guest --> UC_ViewProblems
+    Guest --> UC_RunCode
+    Guest --> UC_ViewForum
 
-User --> UC_Auth
-User --> UC_ViewProblems
-User --> UC_RunCode
-User --> UC_SubmitCode
-User --> UC_Streak
-User --> UC_ViewForum
-User --> UC_InteractForum
+    User --> UC_Auth
+    User --> UC_ViewProblems
+    User --> UC_RunCode
+    User --> UC_SubmitCode
+    User --> UC_Streak
+    User --> UC_ViewForum
+    User --> UC_InteractForum
 
-Admin --> UC_Auth
-Admin --> UC_ManageProblems
-Admin --> UC_ScrapeProblems
-Admin --> UC_ManageAnnounce
-Admin --> UC_PinForum
-Admin --> UC_ViewProblems
-Admin --> UC_ViewForum
+    Admin --> UC_Auth
+    Admin --> UC_ManageProblems
+    Admin --> UC_ScrapeProblems
+    Admin --> UC_ManageAnnounce
+    Admin --> UC_PinForum
+    Admin --> UC_ViewProblems
+    Admin --> UC_ViewForum
 ```
 
 ---
@@ -473,7 +475,7 @@ erDiagram
     Problem ||--o{ ProblemConstraint : "has"
     Problem ||--o{ Discussion : "related_to"
     Problem ||--o{ UserSavedProblem : "bookmarked_in"
-    Problem ||--f| ProblemSolution : "explains"
+    Problem ||--o| ProblemSolution : "explains"
 
     Tag ||--o{ ProblemTag : "categorized_by"
     Discussion ||--o{ Comment : "contains"
