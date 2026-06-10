@@ -11,9 +11,9 @@ Hệ thống áp dụng cơ chế xác thực dựa trên token (**Token-Based A
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Client App (FE)
+    participant Client as Client App (FE)
     participant API as Express Server (BE)
-    database DB as MySQL Database
+    participant DB as MySQL Database
 
     Note over Client, API: Quy trình Đăng nhập (Login)
     Client->>API: POST /api/login (Email, Password)
@@ -127,44 +127,42 @@ Dù viết SQL thuần mang lại hiệu năng tối đa trên lý thuyết, **P
 
 Khi một lập trình viên nhấn nút **Submit** (hoặc **Run Code**), hệ thống sẽ trải qua các bước xử lý tuần tự dưới đây:
 
+```mermaid
+graph TD
+    Start([Người dùng nhấn SUBMIT / RUN]) --> Step1[1. Frontend gửi code + ngôn ngữ + problemId qua API]
+    Step1 --> Step2[2. Backend lấy Testcases & Metadata của bài từ Database]
+    Step2 --> Step3[3. Wrapper Injection: Tiêm class dữ liệu & mã xử lý I/O]
+    Step3 --> Step4[4. Tạo Workspace: Lưu file code vào thư mục tạm temp/runId]
+    Step4 --> Step5[5. Khởi động Docker Container Sandbox]
+    
+    Step5 --> IsCompiled{Ngôn ngữ biên dịch?<br/>C++, Java, TS}
+    IsCompiled -->|Yes| Compile[Biên dịch mã nguồn bằng compiler]
+    Compile --> IsCompileSuccess{Thành công?}
+    IsCompileSuccess -->|No| CompileError[Trả về COMPILE_ERROR] --> Clean
+    
+    IsCompiled -->|No| Run[Chạy thông dịch / Thực thi trực tiếp]
+    IsCompileSuccess -->|Yes| Run
+    
+    Run --> Step6[6. Thực thi Testcases: Nạp stdin & bắt stdout tuần tự]
+    Step6 --> Step7[7. So sánh kết quả: stdout vs expectedOutput trong DB]
+    
+    Step7 --> IsSubmit{isSubmit = true?}
+    IsSubmit -->|Yes| Step8[8. Lưu lịch sử & Tính toán Streak trong DB]
+    
+    subgraph SaveDB [Logic Ghi Database]
+        Step8 --> Sub1[Ghi bản ghi vào bảng submissions]
+        Step8 --> Sub2[Cộng Streak ngày làm bài múi giờ VN]
+        Step8 --> Sub3[Smart Cleanup: Giữ tối đa 20 bản ghi]
+        Step8 --> Sub4[Tăng solvedCount của User nếu đúng lần đầu]
+    end
+    
+    IsSubmit -->|No| Step9[9. Phản hồi JSON kết quả chấm về cho Frontend]
+    SaveDB --> Step9
+    
+    Step9 --> Clean[10. Dọn dẹp: Xóa container Docker & thư mục tạm]
+    Clean --> End([Kết thúc])
 ```
-[Người dùng nhấn SUBMIT] 
-         │
-         ▼
-[1. Frontend gửi mã nguồn + Ngôn ngữ + ID bài tập qua API]
-         │
-         ▼
-[2. Backend truy vấn Database lấy Testcases và Metadata cấu trúc bài tập]
-         │
-         ▼
-[3. Wrapper Injection: Tiêm class cấu trúc (ListNode/TreeNode) và mã đọc stdin/in stdout]
-         │
-         ▼
-[4. Tạo Workspace: Tạo thư mục tạm temp/runId chứa mã nguồn]
-         │
-         ▼
-[5. Khởi động Docker Container Sandbox] 
-         ├───────► (Nếu là C++/Java/TS) ➔ Biên dịch (Compile) ➔ Gặp lỗi ➔ Trả về COMPILE_ERROR
-         │
-         ▼
-[6. Thực thi Testcase]: Nạp tuần tự dữ liệu testcase vào stdin ➔ Bắt kết quả từ stdout 
-         │
-         ▼
-[7. So sánh kết quả]: So khớp stdout thực tế thu được với expectedOutput trong Database
-         │
-         ▼
-[8. Lưu lịch sử & Tính toán Streak] (Chỉ chạy khi isSubmit = true)
-         ├───────► Ghi nhận bản ghi vào bảng submissions
-         ├───────► Tính toán Streak chuẩn múi giờ Việt Nam
-         ├───────► Smart Cleanup: Giới hạn 20 bài nộp (Xóa bài lỗi cũ nhất nếu quá giới hạn)
-         └───────► Nếu bài giải Đúng lần đầu ➔ Tăng solvedCount trong bảng users
-         │
-         ▼
-[9. Phản hồi JSON]: Trả kết quả thống kê (thời gian chạy, bộ nhớ, đúng/sai từng testcase) về FE
-         │
-         ▼
-[10. Dọn dẹp]: Xóa vĩnh viễn container Docker và xóa thư mục tạm trên ổ cứng máy chủ
-```
+
 
 ### Chi tiết bước 3: Wrapper Injection (Tiêm mã nguồn bổ trợ)
 Để người dùng chỉ cần tập trung viết logic giải bài (như viết lớp `Solution` và phương thức giải), hệ thống sẽ bao bọc mã của người dùng trong một cấu trúc chương trình chạy hoàn chỉnh trước khi chuyển xuống Docker:
