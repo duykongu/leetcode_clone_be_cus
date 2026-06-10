@@ -35,7 +35,7 @@ class problemsService {
   }
 
   async getProblems(page = 1, limit = 10, user = null, filters = {}) {
-    const { search, category, difficulty } = filters;
+    const { search, category, difficulty, sortBy, sortOrder } = filters;
     const canViewHidden = can(user, PERMISSIONS.VIEW_HIDDEN_PROBLEMS);
     const userId = user?.id;
 
@@ -63,8 +63,13 @@ class problemsService {
       where.difficulty = difficultyMap[difficulty];
     }
 
+    const orderBy = sortBy
+      ? { [sortBy]: sortOrder === "desc" ? "desc" : "asc" }
+      : { createdAt: "desc" };
+
     const result = await problemsRepository.getProblems({
       where,
+      orderBy,
       select: {
         id: true,
         title: true,
