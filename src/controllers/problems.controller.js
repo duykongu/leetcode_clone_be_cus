@@ -56,6 +56,19 @@ class ProblemsController {
     }
   }
 
+  createProblem = async (req, res) => {
+    try {
+      const problemData = req.body;
+      const result = await this.problemService.createProblem(problemData);
+      res.status(HTTP_STATUS.CREATED).json(result);
+    } catch (err) {
+      res.status(err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: err.message || 'Error',
+      });
+    }
+  }
+
   importProblem = async (req, res) => {
     try {
       const problemData = req.body;
