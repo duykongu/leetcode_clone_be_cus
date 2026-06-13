@@ -208,29 +208,36 @@ ${COMMON_STRUCTURES.python}
 ${userCode}
 
 def _run_wrapper():
-    lines = sys.stdin.read().splitlines()
-    lines = [l for l in lines if l.strip()]
-    if not lines: return
-
     try:
         sol = Solution()
+        ${params.length === 0 ? `
+        args = []
+        res = sol.${methodName}()` : `
+        lines = sys.stdin.read().splitlines()
+        lines = [l for l in lines if l.strip()]
+        if not lines: return
+
         # Chống lỗi khoảng trắng và tên biến l1=, l2=
         cleaned_lines = [re.sub(r'^\\s*[a-zA-Z_0-9]+\\s*=\\s*', '', l) for l in lines]
         args = [json.loads(line) for line in cleaned_lines]
         
         ${deserializeCode}
         
-        res = getattr(sol, '${methodName}')(*args)
+        res = getattr(sol, '${methodName}')(*args)`}
         
         if '${rawReturn}' == 'void':
             res = args[0]
             
         ${serializeCode}
         
-        if isinstance(res, list):
+        if isinstance(res, str):
+            print(res)
+        elif isinstance(res, list):
             print(json.dumps(res))
         elif isinstance(res, bool):
             print(str(res).lower())
+        elif isinstance(res, (int, float)):
+            print(res)
         else:
             print(json.dumps(res))
     except Exception as e:
@@ -266,15 +273,18 @@ ${COMMON_STRUCTURES.javascript}
 ${userCode}
 
 function _run_wrapper() {
-    const input = fs.readFileSync(0, 'utf-8').trim();
-    if (!input) return;
-    const lines = input.split('\\n').filter(Boolean);
     try {
+        ${params.length === 0 ? `
+        let args = [];
+        let res = ${methodName}();` : `
+        const input = fs.readFileSync(0, 'utf-8').trim();
+        if (!input) return;
+        const lines = input.split('\\n').filter(Boolean);
         const args = lines.map(line => JSON.parse(line.replace(/^\\s*[a-zA-Z_0-9]+\\s*=\\s*/, '')));
 
         ${deserializeCode}
 
-        let res = ${methodName}(...args);
+        let res = ${methodName}(...args);`}
         
         if ('${rawReturn}' === 'void') {
             res = args[0];
@@ -282,7 +292,9 @@ function _run_wrapper() {
         
         ${serializeCode}
 
-        if (Array.isArray(res)) {
+        if (typeof res === 'string') {
+            console.log(res);
+        } else if (Array.isArray(res)) {
             console.log(JSON.stringify(res));
         } else if (typeof res === 'boolean') {
             console.log(res.toString());
@@ -323,24 +335,28 @@ ${COMMON_STRUCTURES.typescript}
 ${userCode}
 
 function _run_wrapper() {
-   const rawInput: string = fs.readFileSync(0, 'utf-8').trim();
-
-    if (!rawInput) return;
-    const lines: string[] = rawInput
-        .split('\\n')
-        .filter((line: string) => line.trim().length > 0);
     try {
+        ${params.length === 0 ? `
+        let args: any[] = [];
+        let res: any = ${methodName}();` : `
+        const rawInput: string = fs.readFileSync(0, 'utf-8').trim();
+        if (!rawInput) return;
+        const lines: string[] = rawInput
+            .split('\\n')
+            .filter((line: string) => line.trim().length > 0);
         let args: any[] = lines.map((line: string) => JSON.parse(line.replace(/^\\s*[a-zA-Z_0-9]+\\s*=\\s*/, '')));
 
         ${deserializeCode}
 
         const fn: any = ${methodName};
-        let res: any = fn(...args);
+        let res: any = fn(...args);`}
         
         ${inPlaceLogic}
         ${serializeCode}
 
-        if (Array.isArray(res)) {
+        if (typeof res === 'string') {
+            console.log(res);
+        } else if (Array.isArray(res)) {
             console.log(JSON.stringify(res));
         } else if (typeof res === 'boolean') {
             console.log(String(res));

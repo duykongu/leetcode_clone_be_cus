@@ -93,6 +93,38 @@ class problemsRepository extends BaseRepository {
     return await this.prisma.problem.delete({ where });
   }
 
+  async createProblemSolution(data) {
+    return await this.prisma.problemSolution.create({
+      data: {
+        problemId: data.problemId,
+        explanation: data.explanation || '',
+        timeComplexity: data.timeComplexity || null,
+        spaceComplexity: data.spaceComplexity || null,
+        contentHtml: data.contentHtml || null,
+        codeSnippets: data.codeSnippets || {},
+      },
+    });
+  }
+
+  async getProblemSolution(problemId) {
+    return await this.prisma.problemSolution.findUnique({
+      where: { problemId },
+    });
+  }
+
+  async updateProblemSolution(problemId, data) {
+    return await this.prisma.problemSolution.update({
+      where: { problemId },
+      data: {
+        ...(data.explanation !== undefined && { explanation: data.explanation }),
+        ...(data.timeComplexity !== undefined && { timeComplexity: data.timeComplexity }),
+        ...(data.spaceComplexity !== undefined && { spaceComplexity: data.spaceComplexity }),
+        ...(data.contentHtml !== undefined && { contentHtml: data.contentHtml }),
+        ...(data.codeSnippets !== undefined && { codeSnippets: data.codeSnippets }),
+      },
+    });
+  }
+
   async getDifficultyUserStats() {
     try {
       const [totalEasy, totalMed, totalHard] = await Promise.all([
